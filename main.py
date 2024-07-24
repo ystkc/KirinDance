@@ -70,6 +70,8 @@ def angle_calculation_process(queue, motions0, motions1, parts):
 
     while True:
         ret, frame = cap.read()
+        # 将画面水平翻转
+        frame = cv2.flip(frame, 1)
         if not ret:
             continue
 
