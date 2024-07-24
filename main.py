@@ -65,29 +65,75 @@ def get_pose_angles(img):
 
 def angle_calculation_process(queue, motions0, motions1, parts):
     cap = cv2.VideoCapture(0)
-    standard_video_path = "standard_video_800k_540.mp4"
+    standard_video_path = "standard_video_1600k_540.mp4"
     standard_cap = cv2.VideoCapture(standard_video_path)
 
+    standard_frame_rate = 15
+    frame_period = int(1000 / standard_frame_rate) # millisecond
+    standard_cap.set(cv2.CAP_PROP_FPS, standard_frame_rate)
+    cap.set(cv2.CAP_PROP_FPS, standard_frame_rate)
+    # ret, frame = cap.read()
+    # original_height = 0
+    # original_width = 0
+    # while not ret:
+    #     ret, frame = cap.read()
+    #     original_height, original_width = frame.shape[:2]
+    # print(f"Original frame size: {original_width}x{original_height}")
+    width = 540
+    height = 405
+    assess_width = 60
+    assess_height = 45
+    has = 0
+    has_1 = 0
+    standard_angles = None
+    angles = None
+    # 获取毫秒级时间戳
+    time_start = time.time()
+    frame_count = 0
+    frame_rate = 0
+    # print(f"Resized frame size: {width}x{height}")
+
     while True:
+        frame_count += 1
+        time_now = time.time()
+        if (time_now - time_start) * 1000 < frame_period * frame_count:
+            time.sleep((frame_period * frame_count - (time_now - time_start) * 1000) * 0.001)
+            
+            
+            
+        if frame_count > 30:
+            frame_rate = frame_count / (time_now - time_start)
+        
         ret, frame = cap.read()
         # 将画面水平翻转
-        frame = cv2.flip(frame, 1)
         if not ret:
             continue
+        
+        frame_original = frame.copy()
+        frame_original = cv2.flip(frame_original, 1)
+        frame_original = cv2.resize(frame_original, (width, height))
+        
+        frame = cv2.resize(frame, (assess_width, assess_height))
 
         ret_standard, standard_frame = standard_cap.read()
         if not ret_standard:
             queue.put("END")
             break
-
+        original_standard_frame = standard_frame.copy()
+        original_standard_frame = cv2.resize(original_standard_frame, (width, height))
+        
+        standard_frame = cv2.resize(standard_frame, (assess_width, assess_height))
         standard_frame_rgb = cv2.cvtColor(standard_frame, cv2.COLOR_BGR2RGB)
-        standard_angles = get_pose_angles(standard_frame_rgb)
-        if not standard_angles:
+        if has == 0:
+            standard_angles = get_pose_angles(standard_frame_rgb)
+            # has = 1
+        if standard_angles is None:
             queue.put(None)
             continue
-
-        angles = get_pose_angles(frame)
-        if not angles:
+        if has_1 == 0:
+            angles = get_pose_angles(frame)
+            # has_1 = 1
+        if angles is None:
             queue.put(None)
             continue
 
@@ -105,7 +151,7 @@ def angle_calculation_process(queue, motions0, motions1, parts):
                 frame_scores[part] = 17.35 * math.exp(-(abs_diff - 70) / 20)
 
         frame_score = sum(frame_scores) / len(diff_angle)
-        queue.put((frame, standard_frame, frame_score, diff_angle))
+        queue.put((frame_original, original_standard_frame, frame_score, diff_angle, frame_rate))
 
 # Global variables
 parts = ["左手", "右手", "左腿", "右腿", "身体"]
@@ -161,9 +207,14 @@ def update_gui():
             final_scores = [score for score in scores if score >= 30]
             final_score = sum(final_scores) / len(final_scores) if final_scores else 0
             score_label.config(text=f"最终得分: {final_score:.2f}", background="#ce4c4a")
+            root.destroy()
+            tips.destroy()
+            process.terminate()
+            cv2.destroyAllWindows()
             return
 
-        frame, standard_frame, frame_score, diff_angle = result
+        frame, standard_frame, frame_score, diff_angle, frame_rate = result
+        root.title(f'{frame_rate:.2f}')
         scores.append(frame_score)
 
         tips_text = "动作提示:\n"
@@ -231,6 +282,7 @@ def debug():
         time.sleep(1)
 
 if __name__ == "__main__":
+    
     scores = []
     queue = Queue()
     process = Process(target=angle_calculation_process, args=(queue, motions0, motions1, parts))
@@ -239,8 +291,11 @@ if __name__ == "__main__":
     root.bind('<KeyPress>', on_key_press)
     root.after(1, update_gui)
     # 启动debug线程
-    debug_thread = threading.Thread(target=debug)
+    # debug_thread = threading.Thread(target=debug)
+    time_start = time.time()    
     root.mainloop()
+    time_end = time.time()
+    print(f"程序运行时间: {time_end - time_start:.2f}秒")
 
     process.terminate()
     cv2.destroyAllWindows()
