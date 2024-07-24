@@ -4,10 +4,15 @@ import numpy as np
 import math
 import pickle
 import os
+import time
 import tkinter as tk
 from tkinter import ttk
 from PIL import Image, ImageTk
 from multiprocessing import Process, Queue
+
+
+standard_video_path = "standard_video_1600k_540.mp4"
+standard_frame_rate = 15
 
 # Initialize MediaPipe Pose
 mp_pose = mp.solutions.pose
@@ -76,7 +81,7 @@ def preprocess_standard_video(standard_video_path, progress_var, progress_label,
         
         frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
         angles = get_pose_angles(frame_rgb)
-        standard_data.append((frame, angles))
+        standard_data.append(angles)
 
         current_frame += 1
         progress = (current_frame / total_frames) * 100
@@ -90,7 +95,7 @@ def preprocess_standard_video(standard_video_path, progress_var, progress_label,
  
 
 def angle_calculation_process(queue, motions0, motions1, parts):
-    cap = cv2.VideoCapture(1)
+    cap = cv2.VideoCapture(0)
 
     with open("standard_data.pkl", "rb") as f:
         standard_data = pickle.load(f)
@@ -189,6 +194,10 @@ def update_gui():
             final_scores = [score for score in scores if score >= 30]
             final_score = sum(final_scores) / len(final_scores) if final_scores else 0
             score_label.config(text=f"最终得分: {final_score:.2f}", background="#ce4c4a")
+            root.destroy()
+            tips.destroy()
+            process.terminate()
+            cv2.destroyAllWindows()
             return
 
         frame, standard_frame, frame_score, diff_angle = result
@@ -253,8 +262,8 @@ def on_key_press(event):
         process.terminate()
         reset_program()
 def start_preprocessing():
-    standard_video_path = "./standard_video.mp4"
     cap = cv2.VideoCapture(standard_video_path)
+    cap.set(cv2.CAP_PROP_FPS, standard_frame_rate)
     total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     cap.release()
 
@@ -276,28 +285,18 @@ if __name__ == "__main__":
 
     if not os.path.exists("standard_data.pkl"):
         start_preprocessing()
-        scores = []
-        queue = Queue()
+    scores = []
+    queue = Queue()
 
-        process = Process(target=angle_calculation_process, args=(queue, motions0, motions1, parts))
-        process.start()
+    process = Process(target=angle_calculation_process, args=(queue, motions0, motions1, parts))
+    process.start()
 
-        root.bind('<KeyPress>', on_key_press)
-        root.after(1, update_gui)
-        root.mainloop()
+    root.bind('<KeyPress>', on_key_press)
+    root.after(1, update_gui)
+    time_start = time.time()
+    root.mainloop()
+    time_end = time.time()
+    print(f"程序运行时间: {time_end - time_start:.2f}秒")
 
-        process.terminate()
-        cv2.destroyAllWindows()
-    else:
-        scores = []
-        queue = Queue()
-
-        process = Process(target=angle_calculation_process, args=(queue, motions0, motions1, parts))
-        process.start()
-
-        root.bind('<KeyPress>', on_key_press)
-        root.after(1, update_gui)
-        root.mainloop()
-
-        process.terminate()
-        cv2.destroyAllWindows()
+    process.terminate()
+    cv2.destroyAllWindows()
