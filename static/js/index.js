@@ -79,8 +79,26 @@ function initCamera(){
                 // 获取视频帧数
                 console.log(`Emitted a video BLOB, BPS: ${accumulated_size_blob / blob_period * 1000}`)
                 if (event.data && event.data.size > 0) {  
-                    // 通过 WebSocket 发送 Blob  
-                    socket.emit('record', event.data);  
+                    // 将Blob转换为Frames
+
+                    const reader = new FileReader();
+                    reader.readAsArrayBuffer(event.data);
+                    reader.onload = () => {
+                        const arrayBuffer = reader.result;
+                        const uint8Array = new Uint8Array(arrayBuffer);
+                        const frames = [];
+                        let frame_size = 0;
+                        for (let i = 0; i < uint8Array.length; i++) {
+                            frame_size += uint8Array[i];
+                            if (frame_size === 0) {
+                                frames.push(i);
+                                frame_size = 0;
+                            }
+                        }
+                        
+                        // 发送视频帧数
+                        socket.emit('video_info', { frames: frames.length });
+                    }
                 }  
             };  
             mediaRecorder.start(blob_period); // 开始录制 , 2000ms 为一个blob
@@ -112,6 +130,8 @@ function stop() {
     if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
         mediaStream = null;
+        
+
     }
     // stop the recorder
     if (mediaRecorder) {

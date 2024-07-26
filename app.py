@@ -65,6 +65,10 @@ def convert_canvas_to_cap(canvas_struct):
 def index():
     return render_template('index.html')
 
+@app.route('/camera')
+def camera_test():
+    return render_template('camera.html')
+
 bio = None
 @socketio.on('start')
 def init_decoder():

@@ -1,0 +1,8 @@
+{
+  "devDependencies": {
+    "rollup-plugin-commonjs": "^10.1.0"
+  },
+  "dependencies": {
+    "@rollup/plugin-node-resolve": "^15.2.3"
+  }
+}
