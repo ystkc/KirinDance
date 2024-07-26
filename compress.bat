@@ -6,4 +6,4 @@
 ::教学：540*720,1600k，去除音频
 ::ffmpeg -ss 00:00:00 -t 64 -i standard_video.mp4 -b 800k -vf scale=720:540 -an standard_video_800k_540.mp4
 ::15帧测试
-ffmpeg -ss 00:00:00 -t 6 -i standard_video.mp4 -r 15 -b 1600k -vf scale=720:540 -an standard_video_1600k_540_15fps.mp4
+ffmpeg -ss 00:00:00 -t 64 -i standard_video.mp4 -r 15 -b 1600k -vf scale=720:540 -an standard_video_1600k_540_15fps_64s.mp4

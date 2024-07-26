@@ -2,11 +2,74 @@ import cv2
 import mediapipe as mp
 import numpy as np
 import math
-import tkinter as tk
+import pickle
+import os
+import flask
 import time
-import threading
+import tkinter as tk
+from tkinter import ttk
 from PIL import Image, ImageTk
+import hashlib
 from multiprocessing import Process, Queue
+
+# Configuration
+standard_video_path = "standard_video_1600k_540_15fps_6s.mp4"
+standard_frame_rate = 15 # 帧率
+frame_period = 1000 / standard_frame_rate # 毫秒
+width = 540 # 观察画面尺寸（显卡性能限制，不掉帧即可）
+height = 405
+assess_width = 60 # 姿态计算画面尺寸（过高浪费性能，过低丢失精度）
+assess_height = 45
+total_frames = 0
+total_time = 0
+video_bits_per_second = 800000
+
+
+# Global variables
+parts = ["左手", "右手", "左腿", "右腿", "身体"]
+motions0 = ["展开", "展开", "展开", "展开", "向左倾斜"]
+motions1 = ["收缩", "收缩", "收缩", "收缩", "向右倾斜"]
+
+# Create main window
+root = tk.Tk()
+root.title("迳口麒麟舞AI传承大师")
+root.geometry("2560x1080")
+# root.attributes('-fullscreen', True)
+background_path = "./background.png"
+background = Image.open(background_path)
+background = ImageTk.PhotoImage(background)
+
+# Create labels for displaying images and scores
+background_label = tk.Label(root, image=background, compound="center")
+background_label.place(x=0, y=0, relwidth=1, relheight=1)
+standard_label = tk.Label(root, bd=0)
+standard_label.place(x=200, y=300)
+processed_label = tk.Label(root, bd=0)
+processed_label.place(x=920, y=300)
+score_label = tk.Label(root, text="得分: 0", font=('楷体', 50), bg="#ce4c4a", fg="white", anchor="center", height=1, width=15)
+score_label.place(x=700, y=825)
+background_label.lower()
+
+# 播放进度条
+play_progress_var = tk.DoubleVar()
+play_progress_label = tk.Label(root, text="00:00/00:00", font=('楷体', 15), bg="#ce4c4a")
+play_progress_bar = ttk.Progressbar(root, variable=play_progress_var, maximum=100)
+
+play_progress_bar.place(relx=0.5, rely=0.75, anchor=tk.CENTER, width=1280, height=10)
+play_progress_label.place(relx=0.5, rely=0.75, anchor=tk.CENTER, y=40)
+
+# 由于同一个视频只能创建一个
+standard_cap = cv2.VideoCapture(standard_video_path)
+standard_cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+standard_cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
+standard_cap.set(cv2.CAP_PROP_FPS, standard_frame_rate)
+
+# Create tips window
+tips = tk.Tk()
+tips.title("动作提示")
+tips.geometry("300x250")
+tips_label = tk.Label(tips, text="动作提示:", font=("楷体", 30))
+tips_label.place(x=0, y=0)
 
 # Initialize MediaPipe Pose
 mp_pose = mp.solutions.pose
@@ -63,86 +126,93 @@ def get_pose_angles(img):
         print(f"Error in get_pose_angles: {e}")
         return None
 
-def angle_calculation_process(queue, motions0, motions1, parts):
-    cap = cv2.VideoCapture(0)
-    standard_video_path = "standard_video_1600k_540.mp4"
-    standard_cap = cv2.VideoCapture(standard_video_path)
+def preprocess_standard_video(standard_video_path, progress_var, progress_label, total_frames, cache_path):
+    cap = cv2.VideoCapture(standard_video_path)
+    standard_data = []
 
-    standard_frame_rate = 15
-    frame_period = int(1000 / standard_frame_rate) # millisecond
-    standard_cap.set(cv2.CAP_PROP_FPS, standard_frame_rate)
+    current_frame = 0
+    while cap.isOpened():
+        ret, frame = cap.read()
+        if not ret:
+            break
+        
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        angles = get_pose_angles(frame_rgb)
+        standard_data.append(angles)
+
+        current_frame += 1
+        progress = (current_frame / total_frames) * 100
+        progress_var.set(progress)
+        progress_label.config(text=f"缓存进度: {progress:.2f}%")
+        processed_label.update()
+
+    cap.release()
+    with open(cache_path, "wb") as f:
+        pickle.dump(standard_data, f)
+ 
+
+def angle_calculation_process(queue, motions0, motions1, parts, cache_path):
+    cap = cv2.VideoCapture(0)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, height)
     cap.set(cv2.CAP_PROP_FPS, standard_frame_rate)
-    # ret, frame = cap.read()
-    # original_height = 0
-    # original_width = 0
-    # while not ret:
-    #     ret, frame = cap.read()
-    #     original_height, original_width = frame.shape[:2]
-    # print(f"Original frame size: {original_width}x{original_height}")
-    width = 540
-    height = 405
-    assess_width = 60
-    assess_height = 45
-    has = 0
-    has_1 = 0
-    standard_angles = None
-    angles = None
-    # 获取毫秒级时间戳
+
+    with open(cache_path, "rb") as f:
+        standard_data = pickle.load(f)
+
+    
+
     time_start = time.time()
     frame_count = 0
     frame_rate = 0
-    # print(f"Resized frame size: {width}x{height}")
 
     while True:
         frame_count += 1
-        time_now = time.time()
-        if (time_now - time_start) * 1000 < frame_period * frame_count:
-            time.sleep((frame_period * frame_count - (time_now - time_start) * 1000) * 0.001)
-            
-            
-            
-        if frame_count > 30:
-            frame_rate = frame_count / (time_now - time_start)
-        
-        ret, frame = cap.read()
-        # 将画面水平翻转
-        if not ret:
-            continue
-        
-        frame_original = frame.copy()
-        frame_original = cv2.flip(frame_original, 1)
-        frame_original = cv2.resize(frame_original, (width, height))
-        
-        frame = cv2.resize(frame, (assess_width, assess_height))
-
-        ret_standard, standard_frame = standard_cap.read()
-        if not ret_standard:
+        if frame_count >= len(standard_data):
             queue.put("END")
             break
+
+        time_now = time.time()
+        if (time_now - time_start) * 1000 < frame_period * frame_count: # 帧率限制，因为frame是没有缓存的
+            time.sleep((frame_period * frame_count - (time_now - time_start) * 1000) * 0.001)
+            
+        # if frame_count > 30:
+        #     frame_rate = frame_count / (time_now - time_start)
+
+
+        # 读取画面
+        ret, frame = cap.read()
+        if not ret:
+            continue
+        original_frame = frame.copy()
+        original_frame = cv2.resize(original_frame, (width, height)) # 观看画面尺寸
+        original_frame = cv2.flip(original_frame, 1) # 因为是摄像头录制的，所以需要翻转一下
+        frame = resize_image(frame, assess_width, assess_height) # assess所需尺寸更小，节省计算资源
+
+        ret, standard_frame = standard_cap.read()
+        if not ret:
+            queue.put(None) # 视频结束
+            continue
         original_standard_frame = standard_frame.copy()
         original_standard_frame = cv2.resize(original_standard_frame, (width, height))
-        
-        standard_frame = cv2.resize(standard_frame, (assess_width, assess_height))
-        standard_frame_rgb = cv2.cvtColor(standard_frame, cv2.COLOR_BGR2RGB)
-        if has == 0:
-            standard_angles = get_pose_angles(standard_frame_rgb)
-            # has = 1
-        if standard_angles is None:
+        standard_frame = resize_image(standard_frame, assess_width, assess_height)
+
+        # 读取动作姿态
+        standard_angles = standard_data[frame_count]
+        if not standard_angles: # 初步判断是由于get_pose_angles可能存在记忆属性，不断切换判断可能导致卡慢
             queue.put(None)
             continue
-        if has_1 == 0:
-            angles = get_pose_angles(frame)
-            # has_1 = 1
-        if angles is None:
+        angles = get_pose_angles(frame)
+        if not angles:
             queue.put(None)
             continue
 
         angles = np.round(angles, 2)
-        diff_angle = angles - np.array(standard_angles)
-        frame_scores = np.zeros(len(diff_angle))
+        diff_angles = angles - np.array(standard_angles)
+        frame_scores = np.zeros(len(diff_angles))
 
-        for part in range(len(diff_angle)):
-            abs_diff = abs(diff_angle[part])
+        for part in range(len(diff_angles)):
+            abs_diff = abs(diff_angles[part])
             if abs_diff <= 10:
                 frame_scores[part] = 100 - 0.03 * abs_diff * abs_diff
             elif 10 < abs_diff <= 70:
@@ -150,39 +220,9 @@ def angle_calculation_process(queue, motions0, motions1, parts):
             else:
                 frame_scores[part] = 17.35 * math.exp(-(abs_diff - 70) / 20)
 
-        frame_score = sum(frame_scores) / len(diff_angle)
-        queue.put((frame_original, original_standard_frame, frame_score, diff_angle, frame_rate))
+        frame_score = sum(frame_scores) / len(diff_angles)
+        queue.put((original_frame, original_standard_frame, frame_score, diff_angles, frame_count))
 
-# Global variables
-parts = ["左手", "右手", "左腿", "右腿", "身体"]
-motions0 = ["展开", "展开", "展开", "展开", "向左倾斜"]
-motions1 = ["收缩", "收缩", "收缩", "收缩", "向右倾斜"]
-
-# Create main window
-root = tk.Tk()
-root.title("迳口麒麟舞AI传承大师")
-root.geometry("2560x1600")
-background_path = "./background.png"
-background = Image.open(background_path)
-background = ImageTk.PhotoImage(background)
-
-# Create labels for displaying images and scores
-background_label = tk.Label(root, image=background, compound="center")
-background_label.place(x=0, y=0, relwidth=1, relheight=1)
-standard_label = tk.Label(root, bd=0)
-standard_label.place(x=140, y=300)
-processed_label = tk.Label(root, bd=0)
-processed_label.place(x=960, y=300)
-score_label = tk.Label(root, text="得分: 0", font=('楷体', 50), bg="#ce4c4a", fg="white", anchor="center", height=1, width=15)
-score_label.place(x=600, y=810)
-background_label.lower()
-
-# Create tips window
-tips = tk.Tk()
-tips.title("动作提示")
-tips.geometry("250x180")
-tips_label = tk.Label(tips, text="动作提示:", font=("楷体", 20))
-tips_label.place(x=0, y=0)
 
 # Function to resize image while maintaining aspect ratio
 def resize_image(image, max_width, max_height):
@@ -207,47 +247,52 @@ def update_gui():
             final_scores = [score for score in scores if score >= 30]
             final_score = sum(final_scores) / len(final_scores) if final_scores else 0
             score_label.config(text=f"最终得分: {final_score:.2f}", background="#ce4c4a")
+            time.sleep(2)
             root.destroy()
             tips.destroy()
             process.terminate()
             cv2.destroyAllWindows()
             return
+        # 读取总帧数
+        total_frames = int(standard_cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        total_time = total_frames / standard_frame_rate
 
-        frame, standard_frame, frame_score, diff_angle, frame_rate = result
-        root.title(f'{frame_rate:.2f}')
-        scores.append(frame_score)
+        frame, standard_frame, frame_score, diff_angle, frame_count = result
+        if total_frames > 0:# 0就是还没初始化好
+            
+            play_progress_var.set(frame_count / total_frames * 100)
+            play_progress_label.config(text=f"{time.strftime('%M:%S', time.gmtime(frame_count / standard_frame_rate))} / {time.strftime('%M:%S', time.gmtime(total_time))}")
+            play_progress_label.update()
 
-        tips_text = "动作提示:\n"
-        for part in range(len(diff_angle)):
-            abs_diff = abs(diff_angle[part])
-            if abs_diff <= 10:
-                tips_text += f"{parts[part]}:正确动作\n"
-            elif 10 < abs_diff <= 70:
-                motion = motions0[part] if diff_angle[part] < 0 else motions1[part]
-                tips_text += f"{motion}你的{parts[part]}\n"
-            else:
-                motion = motions0[part] if diff_angle[part] < 0 else motions1[part]
-                tips_text += f"{motion}你的{parts[part]}\n"
+            scores.append(frame_score)
 
-        tips_label.config(text=tips_text)
-        score_label.config(text=f"得分: {frame_score:.2f}", background="#ce4c4a")
+            tips_text = "动作提示:\n"
+            for part in range(len(diff_angle)):
+                abs_diff = abs(diff_angle[part])
+                if abs_diff <= 10:
+                    tips_text += f"{parts[part]}:正确动作\n"
+                elif 10 < abs_diff <= 70:
+                    motion = motions0[part] if diff_angle[part] < 0 else motions1[part]
+                    tips_text += f"{motion}你的{parts[part]}\n"
+                else:
+                    motion = motions0[part] if diff_angle[part] < 0 else motions1[part]
+                    tips_text += f"{motion}你的{parts[part]}\n"
 
-        processed_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        standard_frame_rgb = cv2.cvtColor(standard_frame, cv2.COLOR_BGR2RGB)
+            tips_label.config(text=tips_text)
+            score_label.config(text=f"得分: {frame_score:.2f}", background="#ce4c4a")
 
-        max_width, max_height = 600, 450
-        processed_image = resize_image(processed_image, max_width, max_height)
-        standard_frame_rgb = resize_image(standard_frame_rgb, max_width, max_height)
+            processed_image = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            standard_frame_rgb = cv2.cvtColor(standard_frame, cv2.COLOR_BGR2RGB)
 
-        processed_pil = Image.fromarray(processed_image)
-        processed_tk = ImageTk.PhotoImage(image=processed_pil)
-        processed_label.img_tk = processed_tk
-        processed_label.config(image=processed_tk)
+            processed_pil = Image.fromarray(processed_image)
+            processed_tk = ImageTk.PhotoImage(image=processed_pil)
+            processed_label.img_tk = processed_tk
+            processed_label.config(image=processed_tk)
 
-        standard_pil = Image.fromarray(standard_frame_rgb)
-        standard_tk = ImageTk.PhotoImage(image=standard_pil)
-        standard_label.img_tk = standard_tk
-        standard_label.config(image=standard_tk)
+            standard_pil = Image.fromarray(standard_frame_rgb)
+            standard_tk = ImageTk.PhotoImage(image=standard_pil)
+            standard_label.img_tk = standard_tk
+            standard_label.config(image=standard_tk)
 
     root.after(1, update_gui)
 
@@ -275,24 +320,50 @@ def on_key_press(event):
     elif event.keysym == 'space':
         process.terminate()
         reset_program()
+def start_preprocessing(cache_path):
+    cap = cv2.VideoCapture(standard_video_path)
+    cap.set(cv2.CAP_PROP_FPS, standard_frame_rate)
+    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    total_time = total_frames / standard_frame_rate
+    cap.release()
 
-def debug():
-    while True:
-        print(queue.qsize())
-        time.sleep(1)
+    progress_var = tk.DoubleVar()
+    progress_label = tk.Label(root, text="缓存进度: 0.00%", font=('楷体', 20), bg="#ce4c4a")
+    progress_bar = ttk.Progressbar(root, variable=progress_var, maximum=100)
+
+    progress_bar.place(relx=0.5, rely=0.5, anchor=tk.CENTER, width=1280, height=30)
+    progress_label.place(relx=0.5, rely=0.5, anchor=tk.CENTER, y=40)
+
+    preprocess_standard_video(standard_video_path, progress_var, progress_label, total_frames, cache_path)
+
+    progress_bar.destroy()
+    progress_label.destroy()
+    root.after(1, update_gui)
+
 
 if __name__ == "__main__":
-    
+
+    hash_obj = hashlib.sha256()
+    with open(standard_video_path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            hash_obj.update(chunk)
+    resource_id = hash_obj.hexdigest()
+    if not os.path.exists("./cache"):
+        os.mkdir("./cache")
+    cache_path = f"./cache/{resource_id}.pkl"
+
+    if not os.path.exists(cache_path):
+        start_preprocessing(cache_path)
     scores = []
     queue = Queue()
-    process = Process(target=angle_calculation_process, args=(queue, motions0, motions1, parts))
+
+    process = Process(target=angle_calculation_process, args=(queue, motions0, motions1, parts, cache_path))
+    
     process.start()
 
     root.bind('<KeyPress>', on_key_press)
     root.after(1, update_gui)
-    # 启动debug线程
-    # debug_thread = threading.Thread(target=debug)
-    time_start = time.time()    
+    time_start = time.time()
     root.mainloop()
     time_end = time.time()
     print(f"程序运行时间: {time_end - time_start:.2f}秒")
