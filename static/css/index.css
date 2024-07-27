@@ -22,15 +22,17 @@
 }
 .btn {
   width: 12rem;
-  height: 4rem;
-  color: fieldtext;
-  text-decoration: none;
+  height: 3rem;
+  background: white;
+  display: flex;
+  justify-content: center;
+  align-items: center;
   white-space: nowrap;
   cursor: pointer;
   padding: 0.3rem 0.5rem 0.5rem 0.3rem;
-  box-shadow: inset -0.2rem -0.2rem 0.1rem 0 rgba(0, 0, 0, 0.2);;
+  box-shadow: inset -0.4rem -0.4rem 0.1rem 0 rgba(0, 0, 0, 0.2);;
   border: solid 0.1rem var(--black);
-  border-radius: 0.5rem;
+  border-radius: 0.8rem;
   user-select: none;
   transition: all 0.2s ease;
 }
@@ -40,7 +42,7 @@
 .btn:active,
 .btn.active {
   padding: 0.5rem 0.3rem 0.3rem 0.5rem;
-  box-shadow: inset 0.2rem 0.2rem 0.1rem 0 rgba(0, 0, 0, 0.2);;
+  box-shadow: inset 0.4rem 0.4rem 0.1rem 0 rgba(0, 0, 0, 0.2);;
 }
 .btn.disabled {
   opacity: 0.6;
@@ -86,4 +88,86 @@ progress::-webkit-progress-value {
 /* 未完成部分的样式 */
 progress::-webkit-progress-bar {
   background-color: #eee;
+}
+
+/* Modal Styles From Shadlc */
+
+.modal {
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  top: 0;
+  left: 0;
+  background: rgba(0, 0, 0, 0.2);
+  transition: all 0.5s ease;
+}
+.modal-content {
+  max-height: 90vh;
+  max-width: 80vw;
+  position: absolute;
+  top: 16rem;
+  padding: 0.5rem;
+  padding-top: 1rem;
+  background: white;
+  border: solid 0.1rem var(--black);
+  border-radius: 0.5rem;
+  transition: transform 0.5s ease;
+}
+.modal-title {
+  font-weight: bold;
+  font-size: larger;
+  text-align: center;
+  margin: 0 2rem 0.5rem 2rem;
+}
+.modal-close-btn {
+  position: absolute;
+  right: 0rem;
+  top: -0.4rem;
+}
+.modal-close-btn::after {
+  position: absolute;
+  right: 0;
+  width: 2rem;
+  height: 2rem;
+  content: '×';
+  font-size: 2rem;
+  cursor: pointer;
+}
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-height: 70vh;
+  overflow: scroll;
+}
+.modal-text {
+  font-weight: normal;
+  width: 100%;
+  white-space: pre-wrap;
+}
+.modal-comment {
+  width: 100%;
+  margin-top: 0.5rem;
+  border-top: solid 0.1rem var(--black);
+}
+.loading-text {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+}
+.modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-evenly;
+  width: 100%;
+  padding-top: 1rem;
+}
+.modal-footer:empty {
+  display: none;
 }

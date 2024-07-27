@@ -31,7 +31,7 @@
     </div>
 
     <div class='main' id="main">
-        <div>
+        <div style="display:flex;flex-direction:row;">
             <video id="video" playsinline style=" -moz-transform: scaleX(-1);
             -o-transform: scaleX(-1);
             -webkit-transform: scaleX(-1);
@@ -39,7 +39,10 @@
             display: none;
             ">
             </video>
-            <canvas id="output" style="margin:2rem"></canvas>
+            <div style="position:relative;">
+                <canvas id="output" style="margin:2rem"></canvas>
+                <canvas id="output_mask" style="margin:2rem;position:absolute;top:0;right:0;z-index:100;"></canvas>
+            </div>
             <img id='remoteVideo' style="margin:2rem;vertical-align: top;" />
         </div>  
         <div>
@@ -54,9 +57,9 @@
         </div>
     </div>
     <div class="footer">
-        <button class="btn" id="start">Start</button>
-        <button class="btn" id="pause">Pause</button>
-        <button class="btn" id="stop">Stop</button>
+        <div class="btn" id="start"><div>Start</div></div>
+        <div class="btn" id="pause"><div>Pause</div></div>
+        <div class="btn" id="stop"><div>Stop</div></div>
     </div>
     
     <div class="fpsbox">
@@ -69,6 +72,8 @@
     <script src="static/js/Stats.min.js"></script>
     <script src="static/js/socket.io.min.js"></script>
     <script src="static/js/demo_util.js"></script>
+    <script src="static/js/script.js"></script>
+    <script src="static/js/tracker.js"></script>
     <script type="module" src="static/js/camera.js"></script>
 
 

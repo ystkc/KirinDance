@@ -44,6 +44,7 @@ let video = null;
  
 let localVideo = null;
 let remoteVideo = null;
+let mask_left = null;
 
 // let accumulated_size_frame = 0;
 // let accumulated_size_blob = 0;
@@ -51,17 +52,19 @@ let remoteVideo = null;
 window.onload = function(){
   remoteVideo = document.getElementById('remoteVideo');
   localVideo = document.getElementById('output');
+  mask_left = document.getElementById('output_mask');
   // 调整大小
 
   localVideo.width = width;
   localVideo.height = height;
   remoteVideo.width = width;
   remoteVideo.height = height;
+  mask_left.width = width;
+  mask_left.height = height;
     
   document.getElementById('start').addEventListener('click', async function () {
     enabled = true;
     // initCamera();// 旧版，在后端处理视频帧
-    let time_start = new Date().getTime();
     socket = io.connect(`http://${window.location.hostname}:${window.location.port}`);
     socket.emit('start');
     // 接收到stop后，再运行一次stop函数
@@ -71,9 +74,7 @@ window.onload = function(){
     });
 
 
-    console.log(`socket初始化用时：${new Date().getTime() - time_start}ms`);time_start = new Date().getTime();
     setupFPS();
-    console.log(`FPS初始化用时：${new Date().getTime() - time_start}ms`);time_start = new Date().getTime();
     
     try {
       video = await loadVideo();
@@ -84,9 +85,7 @@ window.onload = function(){
       info.style.display = 'block';
       throw e;
     }
-    console.log(`加载相机用时：${new Date().getTime() - time_start}ms`);time_start = new Date().getTime();
     detectPoseInRealTime(video);
-    
   });
 
   document.getElementById('stop').addEventListener('click', function () { 
@@ -390,9 +389,22 @@ function closeFPS(){
  * happens. This function loops with a requestAnimationFrame method.
  */
 let round = 0;
+let waiting = 0;
+
 function detectPoseInRealTime(video, net) {
   
-  let time_start = Date.now();   // 计时，计算总时间
+  if (guiState.net == null){
+    if (waiting == 0){
+      waiting = 1;
+      showModal("提示","模型正在加载，请稍后...");
+    }
+    setTimeout(() => {
+      detectPoseInRealTime(video, net);
+    }, 1000);
+    return ;
+  }
+  waiting = 0;
+  hideAllModals();
   const canvas = document.getElementById('output');
   const ctx = canvas.getContext('2d');
 
@@ -405,88 +417,94 @@ function detectPoseInRealTime(video, net) {
   canvas.width = videoWidth;
   canvas.height = videoHeight;
   round = 0;
-  console.log(`canvas初始化用时：${Date.now() - time_start}ms`);time_start = Date.now();
 
   async function poseDetectionFrame() {
 
-    
-    if (guiState.changeToArchitecture) {
-      // Important to purge variables and free up GPU memory
-      guiState.net.dispose();
-      toggleLoadingUI(true);
-      guiState.net = await posenet.load({
-        architecture: guiState.changeToArchitecture,
-        outputStride: guiState.outputStride,
-        inputResolution: guiState.inputResolution,
-        multiplier: guiState.multiplier,
-      });
-      toggleLoadingUI(false);
-      guiState.architecture = guiState.changeToArchitecture;
-      guiState.changeToArchitecture = null;
-    }
 
-    if (guiState.changeToMultiplier) {
-      guiState.net.dispose();
-      toggleLoadingUI(true);
-      guiState.net = await posenet.load({
-        architecture: guiState.architecture,
-        outputStride: guiState.outputStride,
-        inputResolution: guiState.inputResolution,
-        multiplier: +guiState.changeToMultiplier,
-        quantBytes: guiState.quantBytes
-      });
-      toggleLoadingUI(false);
-      guiState.multiplier = +guiState.changeToMultiplier;
-      guiState.changeToMultiplier = null;
-    }
+    let time_start = null;
+    let time_current = null;
+    let max_interruption = 3;
+    let interrupion_count = 0;
+    let prev_pose = null;
 
-    if (guiState.changeToOutputStride) {
-      // Important to purge variables and free up GPU memory
-      guiState.net.dispose();
-      toggleLoadingUI(true);
-      guiState.net = await posenet.load({
-        architecture: guiState.architecture,
-        outputStride: +guiState.changeToOutputStride,
-        inputResolution: guiState.inputResolution,
-        multiplier: guiState.multiplier,
-        quantBytes: guiState.quantBytes
-      });
-      toggleLoadingUI(false);
-      guiState.outputStride = +guiState.changeToOutputStride;
-      guiState.changeToOutputStride = null;
-    }
+    // 下面这些是换模型用的，此处无需
+    // if (guiState.changeToArchitecture) {
+    //   // Important to purge variables and free up GPU memory
+    //   guiState.net.dispose();
+    //   toggleLoadingUI(true);
+    //   guiState.net = await posenet.load({
+    //     architecture: guiState.changeToArchitecture,
+    //     outputStride: guiState.outputStride,
+    //     inputResolution: guiState.inputResolution,
+    //     multiplier: guiState.multiplier,
+    //   });
+    //   toggleLoadingUI(false);
+    //   guiState.architecture = guiState.changeToArchitecture;
+    //   guiState.changeToArchitecture = null;
+    // }
 
-    if (guiState.changeToInputResolution) {
-      // Important to purge variables and free up GPU memory
-      guiState.net.dispose();
-      toggleLoadingUI(true);
-      guiState.net = await posenet.load({
-        architecture: guiState.architecture,
-        outputStride: guiState.outputStride,
-        inputResolution: +guiState.changeToInputResolution,
-        multiplier: guiState.multiplier,
-        quantBytes: guiState.quantBytes
-      });
-      toggleLoadingUI(false);
-      guiState.inputResolution = +guiState.changeToInputResolution;
-      guiState.changeToInputResolution = null;
-    }
+    // if (guiState.changeToMultiplier) {
+    //   guiState.net.dispose();
+    //   toggleLoadingUI(true);
+    //   guiState.net = await posenet.load({
+    //     architecture: guiState.architecture,
+    //     outputStride: guiState.outputStride,
+    //     inputResolution: guiState.inputResolution,
+    //     multiplier: +guiState.changeToMultiplier,
+    //     quantBytes: guiState.quantBytes
+    //   });
+    //   toggleLoadingUI(false);
+    //   guiState.multiplier = +guiState.changeToMultiplier;
+    //   guiState.changeToMultiplier = null;
+    // }
 
-    if (guiState.changeToQuantBytes) {
-      // Important to purge variables and free up GPU memory
-      guiState.net.dispose();
-      toggleLoadingUI(true);
-      guiState.net = await posenet.load({
-        architecture: guiState.architecture,
-        outputStride: guiState.outputStride,
-        inputResolution: guiState.inputResolution,
-        multiplier: guiState.multiplier,
-        quantBytes: guiState.changeToQuantBytes
-      });
-      toggleLoadingUI(false);
-      guiState.quantBytes = guiState.changeToQuantBytes;
-      guiState.changeToQuantBytes = null;
-    }
+    // if (guiState.changeToOutputStride) {
+    //   // Important to purge variables and free up GPU memory
+    //   guiState.net.dispose();
+    //   toggleLoadingUI(true);
+    //   guiState.net = await posenet.load({
+    //     architecture: guiState.architecture,
+    //     outputStride: +guiState.changeToOutputStride,
+    //     inputResolution: guiState.inputResolution,
+    //     multiplier: guiState.multiplier,
+    //     quantBytes: guiState.quantBytes
+    //   });
+    //   toggleLoadingUI(false);
+    //   guiState.outputStride = +guiState.changeToOutputStride;
+    //   guiState.changeToOutputStride = null;
+    // }
+
+    // if (guiState.changeToInputResolution) {
+    //   // Important to purge variables and free up GPU memory
+    //   guiState.net.dispose();
+    //   toggleLoadingUI(true);
+    //   guiState.net = await posenet.load({
+    //     architecture: guiState.architecture,
+    //     outputStride: guiState.outputStride,
+    //     inputResolution: +guiState.changeToInputResolution,
+    //     multiplier: guiState.multiplier,
+    //     quantBytes: guiState.quantBytes
+    //   });
+    //   toggleLoadingUI(false);
+    //   guiState.inputResolution = +guiState.changeToInputResolution;
+    //   guiState.changeToInputResolution = null;
+    // }
+
+    // if (guiState.changeToQuantBytes) {
+    //   // Important to purge variables and free up GPU memory
+    //   guiState.net.dispose();
+    //   toggleLoadingUI(true);
+    //   guiState.net = await posenet.load({
+    //     architecture: guiState.architecture,
+    //     outputStride: guiState.outputStride,
+    //     inputResolution: guiState.inputResolution,
+    //     multiplier: guiState.multiplier,
+    //     quantBytes: guiState.changeToQuantBytes
+    //   });
+    //   toggleLoadingUI(false);
+    //   guiState.quantBytes = guiState.changeToQuantBytes;
+    //   guiState.changeToQuantBytes = null;
+    // }
 
     // Begin monitoring code for frames per second
     stats.begin();
@@ -534,6 +552,7 @@ function detectPoseInRealTime(video, net) {
         }))
       });
     }
+
     
 
     ctx.clearRect(0, 0, videoWidth, videoHeight);
@@ -580,6 +599,8 @@ function detectPoseInRealTime(video, net) {
         }
       }
     }
+    // tracker: 跟踪连续动作
+      updateJointState(poses[0], Date.now());
 
     // End monitoring code for frames per second
     stats.end();
@@ -590,9 +611,54 @@ function detectPoseInRealTime(video, net) {
       
       remoteVideo.src = '/video_feed'
       remoteVideo.style.opacity = 1;
+      const source = new EventSource('/message');
+      source.onmessage = function (event) {
+        const data = event.data.split('#');
+        const messageObject = {};
 
+        data.forEach(line => {
+          const [key, value] = line.split('$');
+          if (key && value) {
+            messageObject[key] = value;
+          }
+        });
+        // handler
+        if (messageObject.type === 'pose') {
+          const pose = JSON.parse(messageObject.pose);
+          console.log(pose); // 我也不知道结构
+          const keypoints = pose.keypoints.map(keypoint => ({
+            position: {
+              x: keypoint.position.x,
+              y: keypoint.position.y
+            },
+            score: keypoint.score,
+            part: keypoint.part
+          }));
+          if (guiState.output.showPoints) {
+            drawKeypoints(keypoints, minPartConfidence, ctx);
+          }
+          if (guiState.output.showSkeleton) {
+            drawSkeleton(keypoints, minPartConfidence, ctx);
+          }
+          if (guiState.output.showBoundingBox) {
+            drawBoundingBox(keypoints, ctx);
+          }
+
+        }
+        else if (messageObject.type === 'progress') {
+          // 进度条
+          console.log(messageObject.progress);
+          document.getElementById('progress').value = messageObject.progress;
+        }
+      };
     }
-      requestAnimationFrame(poseDetectionFrame); // continue looping
+    if (!enabled) {
+      // 清屏
+      ctx.clearRect(0, 0, videoWidth, videoHeight);
+      // 此处无需其他清理，在按钮点击时清理
+      return;
+    }
+    requestAnimationFrame(poseDetectionFrame); // continue looping
   }
 
   poseDetectionFrame();
