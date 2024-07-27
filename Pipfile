@@ -6,6 +6,9 @@ name = "pypi"
 [packages]
 ffmpeg-python = "*"
 av = "*"
+flask = "*"
+flask-cors = "*"
+dash = "*"
 
 [dev-packages]
 
