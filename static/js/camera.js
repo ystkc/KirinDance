@@ -37,9 +37,10 @@ const blob_period = 2000 // 发送视频帧的间隔，单位毫秒
 let enabled = false;
 let socket = null;
 let mediaRecorder = null;
-let vmediaStream = null;
+let mediaStream = null;
 let receiver_id = null;
 let imageCapture = null;
+let video = null;
  
 let localVideo = null;
 let remoteVideo = null;
@@ -49,43 +50,63 @@ let remoteVideo = null;
 
 window.onload = function(){
   remoteVideo = document.getElementById('remoteVideo');
-  localVideo = document.getElementById('video');
+  localVideo = document.getElementById('output');
   // 调整大小
 
   localVideo.width = width;
   localVideo.height = height;
   remoteVideo.width = width;
   remoteVideo.height = height;
-  // 添加控制条
-  remoteVideo.controls = true;
     
-  document.getElementById('start').addEventListener('click', function () {
+  document.getElementById('start').addEventListener('click', async function () {
     enabled = true;
     // initCamera();// 旧版，在后端处理视频帧
+    let time_start = new Date().getTime();
     socket = io.connect(`http://${window.location.hostname}:${window.location.port}`);
-    socket.on('video', data => {;// 接收视频Blob数据
-        console.log(`Received a video blob, size: ${data.size},Frames: ${data.frames}, `)
-        if (data && data.size > 0) {  
-            // 显示远程画面
-            remoteVideo.src = URL.createObjectURL(data);
-        }
+    socket.emit('start');
+    // 接收到stop后，再运行一次stop函数
+    socket.on('stop', function () {
+      enabled = false;
+      document.getElementById('stop').click();
     });
-    bindPage();
+
+
+    console.log(`socket初始化用时：${new Date().getTime() - time_start}ms`);time_start = new Date().getTime();
+    setupFPS();
+    console.log(`FPS初始化用时：${new Date().getTime() - time_start}ms`);time_start = new Date().getTime();
+    
+    try {
+      video = await loadVideo();
+    } catch (e) {
+      let info = document.getElementById('info');
+      info.textContent = 'this browser does not support video capture,' +
+          'or this device does not have a camera';
+      info.style.display = 'block';
+      throw e;
+    }
+    console.log(`加载相机用时：${new Date().getTime() - time_start}ms`);time_start = new Date().getTime();
+    detectPoseInRealTime(video);
+    
   });
 
   document.getElementById('stop').addEventListener('click', function () { 
     enabled = false;
+    
+    closeFPS();
     // close the socket
     if (socket && socket.connected) {
-        socket.emit('stop')
+        socket.emit('stop');
         socket.disconnect();
+    }
+    if (remoteVideo.src) {
+      // 是个链接，需要清除
+      remoteVideo.setAttribute('src', '');
+      remoteVideo.style.opacity = 0;
     }
     // close the camera
     if (mediaStream) {
         mediaStream.getTracks().forEach(track => track.stop());
         mediaStream = null;
-        
-
     }
     // stop the recorder
     if (mediaRecorder) {
@@ -102,10 +123,13 @@ window.onload = function(){
   });
 
 }
+document.getElementById('pause').addEventListener('click', function () { 
+  socket.emit('pause');
+});
 
 
-const videoWidth = 1280;
-const videoHeight = 720;
+const videoWidth = width;
+const videoHeight = height;
 const stats = new Stats();
 
 /**
@@ -118,12 +142,12 @@ async function setupCamera() {
         'Browser API navigator.mediaDevices.getUserMedia not available');
   }
 
-  const video = document.getElementById('video');
+  video = document.getElementById('video');
   video.width = videoWidth;
   video.height = videoHeight;
 
   const mobile = isMobile();
-  const stream = await navigator.mediaDevices.getUserMedia({
+  mediaStream = await navigator.mediaDevices.getUserMedia({
     'audio': false,
     'video': {
       facingMode: 'user',
@@ -131,7 +155,7 @@ async function setupCamera() {
       height: mobile ? undefined : videoHeight,
     },
   });
-  video.srcObject = stream;
+  video.srcObject = mediaStream;
 
   return new Promise((resolve) => {
     video.onloadedmetadata = () => {
@@ -355,14 +379,20 @@ function setupGui(cameras, net) {
  */
 function setupFPS() {
   stats.showPanel(0);  // 0: fps, 1: ms, 2: mb, 3+: custom
-  document.getElementById('main').appendChild(stats.domElement);
+  document.querySelector('.fpsbox').appendChild(stats.domElement);
+}
+function closeFPS(){
+  stats.domElement.remove();
 }
 
 /**
  * Feeds an image to posenet to estimate poses - this is where the magic
  * happens. This function loops with a requestAnimationFrame method.
  */
+let round = 0;
 function detectPoseInRealTime(video, net) {
+  
+  let time_start = Date.now();   // 计时，计算总时间
   const canvas = document.getElementById('output');
   const ctx = canvas.getContext('2d');
 
@@ -374,8 +404,12 @@ function detectPoseInRealTime(video, net) {
 
   canvas.width = videoWidth;
   canvas.height = videoHeight;
+  round = 0;
+  console.log(`canvas初始化用时：${Date.now() - time_start}ms`);time_start = Date.now();
 
   async function poseDetectionFrame() {
+
+    
     if (guiState.changeToArchitecture) {
       // Important to purge variables and free up GPU memory
       guiState.net.dispose();
@@ -486,12 +520,11 @@ function detectPoseInRealTime(video, net) {
     }
 
     // 先发送第一个人的信息给后端
-    if (socket && socket.connected) {
-      const pose = poses[0];
-      const keypoints = pose.keypoints;
+    if (poses.length > 0 && socket && socket.connected) {
+      let pose = poses[0];
       socket.emit('pose', {
         score: pose.score,
-        keypoints: keypoints.map(keypoint => ({
+        keypoints: pose.keypoints.map(keypoint => ({
           position: {
             x: keypoint.position.x,
             y: keypoint.position.y
@@ -533,8 +566,8 @@ function detectPoseInRealTime(video, net) {
     // });
     // 只要第一个pose
     if (poses.length > 0) {
-      score = poses[0].score;
-      keypoints = poses[0].keypoints;
+      let score = poses[0].score;
+      let keypoints = poses[0].keypoints;
       if (score >= minPoseConfidence) {
         if (guiState.output.showPoints) {
           drawKeypoints(keypoints, minPartConfidence, ctx);
@@ -550,8 +583,16 @@ function detectPoseInRealTime(video, net) {
 
     // End monitoring code for frames per second
     stats.end();
+    
+    round++;
+    if (round == 1){
+      // 已经完成首次渲染，开始加载标准视频
+      
+      remoteVideo.src = '/video_feed'
+      remoteVideo.style.opacity = 1;
 
-    requestAnimationFrame(poseDetectionFrame);
+    }
+      requestAnimationFrame(poseDetectionFrame); // continue looping
   }
 
   poseDetectionFrame();
@@ -571,23 +612,14 @@ export async function bindPage() {
     quantBytes: guiState.input.quantBytes
   });
   toggleLoadingUI(false);
-
-  let video;
-
-  try {
-    video = await loadVideo();
-  } catch (e) {
-    let info = document.getElementById('info');
-    info.textContent = 'this browser does not support video capture,' +
-        'or this device does not have a camera';
-    info.style.display = 'block';
-    throw e;
-  }
-
+  // posenet模型需要联网加载，所以预先异步加载
   setupGui([], net);
-  setupFPS();
-  detectPoseInRealTime(video, net);
+  
+
+  // 测试，先打开再关闭摄像头
+  
 }
+bindPage();
 
 navigator.getUserMedia = navigator.getUserMedia ||
     navigator.webkitGetUserMedia || navigator.mozGetUserMedia;

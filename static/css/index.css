@@ -1,0 +1,89 @@
+.btn-group {
+  flex-basis: 100%;
+  display: flex;
+  flex-direction: row;
+  justify-content: space-evenly;
+  padding: 0.5rem;
+  overflow: hidden;
+}
+.main{
+  align-items: center;
+    position: relative;
+    top: 12rem;
+    justify-content: center;
+    flex-direction: column;
+}
+.fpsbox{
+  /*左下角*/
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+}
+.btn {
+  width: 12rem;
+  height: 4rem;
+  color: fieldtext;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  padding: 0.3rem 0.5rem 0.5rem 0.3rem;
+  box-shadow: inset -0.2rem -0.2rem 0.1rem 0 rgba(0, 0, 0, 0.2);;
+  border: solid 0.1rem var(--black);
+  border-radius: 0.5rem;
+  user-select: none;
+  transition: all 0.2s ease;
+}
+.btn:focus, input:focus {
+  box-shadow: none !important;
+}
+.btn:active,
+.btn.active {
+  padding: 0.5rem 0.3rem 0.3rem 0.5rem;
+  box-shadow: inset 0.2rem 0.2rem 0.1rem 0 rgba(0, 0, 0, 0.2);;
+}
+.btn.disabled {
+  opacity: 0.6;
+  transform: none !important;
+  cursor: not-allowed;
+}
+
+.footer {
+  width: 50%;
+  margin-left: 25%;
+  justify-content: space-evenly;
+  display: flex;
+  position: fixed;
+  bottom: 4rem;
+}
+.score {
+  text-align: center;
+  font-size: 2rem;
+  font-weight: bold;
+  color: var(--black);
+}
+.round{
+  /*圆角进度条外壳*/
+  width:64rem;
+  border-radius: 5rem;
+  overflow: hidden;
+}
+progress {
+  width: 100%;
+  height: 20px;
+  color: #555;
+  background-color: #eee;
+  border: none;
+  border-radius: 3px;
+  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2) inset;
+}
+
+/* 已完成部分的样式 */
+progress::-webkit-progress-value {
+  background-color: #00cccccc;
+}
+
+/* 未完成部分的样式 */
+progress::-webkit-progress-bar {
+  background-color: #eee;
+}

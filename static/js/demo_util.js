@@ -20,7 +20,7 @@
 const color = '#00ffff66';
 const pointColor = '#00ff6688'
 const boundingBoxColor = 'red';
-const lineWidth = 32;
+const lineWidth = 16;
 
 const tryResNetButtonName = 'tryResNetButton';
 const tryResNetButtonText = '[New] Try ResNet50';
@@ -68,7 +68,7 @@ function toggleLoadingUI(
     document.getElementById(mainDivId).style.display = 'none';
   } else {
     document.getElementById(loadingDivId).style.display = 'none';
-    document.getElementById(mainDivId).style.display = 'block';
+    document.getElementById(mainDivId).style.display = 'flex';
   }
 }
 

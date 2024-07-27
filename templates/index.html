@@ -2,15 +2,8 @@
 <html>
 
 <head>
-    <title>PoseNet - Camera Feed Demo</title>
+    <title>迳口麒麟舞AI传承大师</title>
     <style>
-    .footer {
-        position: fixed;
-        left: 0;
-        bottom: 0;
-        width: 100%;
-        color: black;
-    }
 
     .footer-text {
         max-width: 600px;
@@ -23,37 +16,58 @@
         display: none;
       }
     }
+    
     </style>
+    <link rel="stylesheet" href="static/css/index.css">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 
-<body>
+<body style="background-image: url('static/img/background.png');background-repeat: no-repeat;background-size: cover;">
+    
     <div id="info" style='display:none'>
     </div>
     <div id="loading">
         Loading the model...
     </div>
 
-    <div id='main'>
-        <video id="video" playsinline style=" -moz-transform: scaleX(-1);
-        -o-transform: scaleX(-1);
-        -webkit-transform: scaleX(-1);
-        transform: scaleX(-1);
-        display: none;
-        ">
-        </video>
-        <canvas id="output"></canvas>
-        <video id="remoteVideo"></video>
-        <button id="start">Start</button>
-        <button id="stop">Stop</button>
+    <div class='main' id="main">
+        <div>
+            <video id="video" playsinline style=" -moz-transform: scaleX(-1);
+            -o-transform: scaleX(-1);
+            -webkit-transform: scaleX(-1);
+            transform: scaleX(-1);
+            display: none;
+            ">
+            </video>
+            <canvas id="output" style="margin:2rem"></canvas>
+            <img id='remoteVideo' style="margin:2rem;vertical-align: top;" />
+        </div>  
+        <div>
+            <div class="round">
+                <progress id="progress" value="1" max="100"></progress>
+            </div>
+        </div>
+        <div>
+            <div>
+                <div id="score" class="score">得分：</div>
+            </div>
+        </div>
+    </div>
+    <div class="footer">
+        <button class="btn" id="start">Start</button>
+        <button class="btn" id="pause">Pause</button>
+        <button class="btn" id="stop">Stop</button>
+    </div>
+    
+    <div class="fpsbox">
+
     </div>
     
     <script src="static/js/tf.min.js"></script>
-    <!-- 加载dat.gui -->
-    <!-- <script src="https://cdnjs.cloudflare.com/ajax/libs/dat-gui/0.7.7/dat.gui.min.js"></script> -->
     <script src="static/js/dat.gui.min.js"></script>
     <script src="static/js/posenet.min.js"></script>
     <script src="static/js/Stats.min.js"></script>
+    <script src="static/js/socket.io.min.js"></script>
     <script src="static/js/demo_util.js"></script>
     <script type="module" src="static/js/camera.js"></script>
 
