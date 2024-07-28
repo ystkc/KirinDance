@@ -34,13 +34,14 @@ const total_time = 0
 const video_bits_per_second = 6400000 // 视频比特率，800kbps
 const blob_period = 2000 // 发送视频帧的间隔，单位毫秒
  
-let enabled = false;
+let enabled_1 = false;
 let socket = null;
 let mediaRecorder = null;
 let mediaStream = null;
 let receiver_id = null;
 let imageCapture = null;
 let video = null;
+let source = null;
  
 let localVideo = null;
 let remoteVideo = null;
@@ -63,13 +64,59 @@ window.onload = function(){
   mask_left.height = height;
     
   document.getElementById('start').addEventListener('click', async function () {
-    enabled = true;
+    if (enabled_1) {
+      document.getElementById('pause').click();
+      return;
+    }
+    enabled_1 = true;
+
+    source = new EventSource('/message');
+    source.onmessage = function (event) {
+      const data = event.data.split('#');
+      const messageObject = {};
+
+      data.forEach(line => {
+        const [key, value] = line.split('$');
+        if (key && value) {
+          messageObject[key] = value;
+        }
+      });
+      // handler
+      if (messageObject.type === 'pose') {
+        const pose = JSON.parse(messageObject.pose);
+        console.log(pose); // 我也不知道结构
+        const keypoints = pose.keypoints.map(keypoint => ({
+          position: {
+            x: keypoint.position.x,
+            y: keypoint.position.y
+          },
+          score: keypoint.score,
+          part: keypoint.part
+        }));
+        let ctx = remoteVideo.getContext('2d');
+        if (guiState.output.showPoints) {
+          drawKeypoints(keypoints, minPartConfidence, ctx);
+        }
+        if (guiState.output.showSkeleton) {
+          drawSkeleton(keypoints, minPartConfidence, ctx);
+        }
+        if (guiState.output.showBoundingBox) {
+          drawBoundingBox(keypoints, ctx);
+        }
+
+      }
+      else if (messageObject.type === 'progress') {
+        // 进度条
+        console.log(messageObject.progress);
+        document.getElementById('progress').value = messageObject.progress;
+      }
+    };
     // initCamera();// 旧版，在后端处理视频帧
     socket = io.connect(`http://${window.location.hostname}:${window.location.port}`);
     socket.emit('start');
     // 接收到stop后，再运行一次stop函数
     socket.on('stop', function () {
-      enabled = false;
+      enabled_1 = false;
       document.getElementById('stop').click();
     });
 
@@ -85,13 +132,19 @@ window.onload = function(){
       info.style.display = 'block';
       throw e;
     }
+    
     detectPoseInRealTime(video);
   });
 
   document.getElementById('stop').addEventListener('click', function () { 
-    enabled = false;
+    enabled_1 = false;
     
     closeFPS();
+    // stop the message source
+    if (source) {
+      source.close();
+      source = null;
+    }
     // close the socket
     if (socket && socket.connected) {
         socket.emit('stop');
@@ -204,6 +257,7 @@ const guiState = {
  */
 function setupGui(cameras, net) {
   guiState.net = net;
+  
 
 //   if (cameras.length > 0) {
 //     guiState.camera = cameras[0].deviceId;
@@ -417,15 +471,19 @@ function detectPoseInRealTime(video, net) {
   canvas.width = videoWidth;
   canvas.height = videoHeight;
   round = 0;
+  initJointState();
 
   async function poseDetectionFrame() {
-
+    
 
     let time_start = null;
     let time_current = null;
     let max_interruption = 3;
     let interrupion_count = 0;
     let prev_pose = null;
+    
+    
+    
 
     // 下面这些是换模型用的，此处无需
     // if (guiState.changeToArchitecture) {
@@ -523,6 +581,7 @@ function detectPoseInRealTime(video, net) {
         minPartConfidence = +guiState.singlePoseDetection.minPartConfidence;
         break;
       case 'multi-pose':
+        
         let all_poses = await guiState.net.estimatePoses(video, {
           flipHorizontal: flipPoseHorizontal,
           decodingMethod: 'multi-person',
@@ -530,6 +589,7 @@ function detectPoseInRealTime(video, net) {
           scoreThreshold: guiState.multiPoseDetection.minPartConfidence,
           nmsRadius: guiState.multiPoseDetection.nmsRadius
         });
+        
 
         poses = poses.concat(all_poses);
         minPoseConfidence = +guiState.multiPoseDetection.minPoseConfidence;
@@ -537,6 +597,7 @@ function detectPoseInRealTime(video, net) {
         break;
     }
 
+    
     // 先发送第一个人的信息给后端
     if (poses.length > 0 && socket && socket.connected) {
       let pose = poses[0];
@@ -556,6 +617,7 @@ function detectPoseInRealTime(video, net) {
     
 
     ctx.clearRect(0, 0, videoWidth, videoHeight);
+    
     
 
     if (guiState.output.showVideo) {
@@ -611,50 +673,14 @@ function detectPoseInRealTime(video, net) {
       
       remoteVideo.src = '/video_feed'
       remoteVideo.style.opacity = 1;
-      const source = new EventSource('/message');
-      source.onmessage = function (event) {
-        const data = event.data.split('#');
-        const messageObject = {};
-
-        data.forEach(line => {
-          const [key, value] = line.split('$');
-          if (key && value) {
-            messageObject[key] = value;
-          }
-        });
-        // handler
-        if (messageObject.type === 'pose') {
-          const pose = JSON.parse(messageObject.pose);
-          console.log(pose); // 我也不知道结构
-          const keypoints = pose.keypoints.map(keypoint => ({
-            position: {
-              x: keypoint.position.x,
-              y: keypoint.position.y
-            },
-            score: keypoint.score,
-            part: keypoint.part
-          }));
-          if (guiState.output.showPoints) {
-            drawKeypoints(keypoints, minPartConfidence, ctx);
-          }
-          if (guiState.output.showSkeleton) {
-            drawSkeleton(keypoints, minPartConfidence, ctx);
-          }
-          if (guiState.output.showBoundingBox) {
-            drawBoundingBox(keypoints, ctx);
-          }
-
-        }
-        else if (messageObject.type === 'progress') {
-          // 进度条
-          console.log(messageObject.progress);
-          document.getElementById('progress').value = messageObject.progress;
-        }
-      };
+      
     }
-    if (!enabled) {
+    
+    if (!enabled_1) {
       // 清屏
       ctx.clearRect(0, 0, videoWidth, videoHeight);
+      const ctx_left = mask_left.getContext('2d');
+      ctx_left.clearRect(0, 0, videoWidth, videoHeight);
       // 此处无需其他清理，在按钮点击时清理
       return;
     }
@@ -681,8 +707,6 @@ export async function bindPage() {
   // posenet模型需要联网加载，所以预先异步加载
   setupGui([], net);
   
-
-  // 测试，先打开再关闭摄像头
   
 }
 bindPage();

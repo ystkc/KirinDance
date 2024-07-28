@@ -1,5 +1,5 @@
 from werkzeug.serving import WSGIRequestHandler, _log
-from flask import Flask, render_template, Response
+from flask import Flask, render_template, Response, stream_with_context
 from flask_socketio import SocketIO, emit
 import mediapipe as mp
 from PIL import Image
@@ -43,7 +43,7 @@ standard_cap = None
 total_frames = 0
 total_time = 0
 standard_total_frames = 0
-frame_count = 0
+current_frame_count = 0
 
 
 
@@ -55,7 +55,7 @@ stopped = False
 
 
 def video_generator():
-    global standard_cap, total_frames, total_time, standard_total_frames, frame_count
+    global standard_cap, total_frames, total_time, standard_total_frames, current_frame_count
     time_start = time.time()
     frame_count = 0
     frame_rate = 0
@@ -69,6 +69,7 @@ def video_generator():
     
     paused = False
     stopped = False
+    current_frame_count = 0
 
     standard_cap = cv2.VideoCapture(standard_video_path)
     standard_total_frames = int(standard_cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -89,9 +90,11 @@ def video_generator():
 
         # 计算帧率
         frame_count += 1
-        if frame_count >= standard_total_frames:
+        current_frame_count += 1
+        if current_frame_count >= standard_total_frames:
             # 通过socket通知客户端停止
             socketio.emit('stop')
+            print('standard_cap video playing finished')
             break
         time_now = time.time()
         if (time_now - time_start) * 1000 < frame_period * frame_count: # 帧率限制，因为frame是没有缓存的
@@ -140,6 +143,15 @@ def convert_canvas_to_cap(canvas_struct):
 def video_feed():
     return Response(video_generator(),
                     mimetype='multipart/x-mixed-replace; boundary=frame')
+
+def message_generator():
+    # while True:
+        # time.sleep(1)
+    yield f"data: Current frame count: {current_frame_count}<br>"
+
+@app.route('/message')
+def message() -> Response:
+    return Response(stream_with_context(message_generator()), content_type='text/event-stream')
 
 @app.route('/')
 def index():
