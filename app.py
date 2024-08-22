@@ -145,9 +145,10 @@ def video_feed():
                     mimetype='multipart/x-mixed-replace; boundary=frame')
 
 def message_generator():
-    # while True:
-        # time.sleep(1)
-    yield f"data: Current frame count: {current_frame_count}<br>"
+    while True:
+        time.sleep(0.1)
+        progress_percentage = ((current_frame_count) / standard_total_frames) * 100
+        yield f"data: progress${progress_percentage}#name$progress\n\n"
 
 @app.route('/message')
 def message() -> Response:

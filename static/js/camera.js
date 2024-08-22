@@ -84,7 +84,7 @@ window.onload = function(){
         }
       });
       // handler
-      if (messageObject.type === 'pose') {
+      if (messageObject.name === 'pose') {
         const pose = JSON.parse(messageObject.pose);
         console.log(pose); // 我也不知道结构
         const keypoints = pose.keypoints.map(keypoint => ({
@@ -107,7 +107,7 @@ window.onload = function(){
         }
 
       }
-      else if (messageObject.type === 'progress') {
+      else if (messageObject.name === 'progress') {
         // 进度条
         console.log(messageObject.progress);
         document.getElementById('progress').value = messageObject.progress;
@@ -145,6 +145,7 @@ window.onload = function(){
     closeFPS();
     // stop the message source
     if (source) {
+      document.getElementById('progress').value = 100;  // 进度条
       source.close();
       source = null;
     }

@@ -174,8 +174,9 @@ function drawHistory() {
     const ctx = canvas.getContext('2d');  
     ctx.clearRect(0, 0, canvas.width, canvas.height);  
   
-    for (let i = 5; i < 16; i++) {  
-        if (jointStates[i]) {  
+    // for (let i = 5; i < 16; i++) {
+    let i = 9;{  
+        // if (jointStates[i]) {  
             const points = history.map(item => ({ x: item[i].x, y: item[i].y, angle: item[i].direction }));  
              
             // ctx.beginPath();  
@@ -201,14 +202,13 @@ function drawHistory() {
             // ctx.stroke();  
             // 画圆弧
             
-            for (let j = 1; j < points.length; j++) {  
-                // 先求圆心
+            for (let j = 1; j < points.length; j++) { 
                 drawArc(ctx, points[j-1].x, points[j-1].y, points[j-1].angle, points[j].x, points[j].y, points[j].angle);
                 
             }  
 
 
-        }  
+        // }  
     }  
 }  
   
