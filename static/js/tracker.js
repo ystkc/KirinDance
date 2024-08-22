@@ -114,22 +114,60 @@ function updateHistory(positions, directions) {
     // 将positions中每个项与directions合并，然后加入history
     history.push(positions.map((pos, i) => ({...pos, direction: directions[i]})));
 }  
-function drawArc(ctx, x1, y1, k1, x2, y2, k2) {
-    // 求两条线交点即为圆心
+function drawArc(ctx, x1, y1, a1, x2, y2, a2) {
+    // 先用绿色画出两个点连线
+    console.log(x1, y1, a1, x2, y2, a2);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.strokeStyle = '#00FF00';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.closePath();
+    // 计算两切点处的圆心连线斜率
+    const k1 = -1 / Math.tan(a1 * Math.PI / 180);
+    const k2 = -1 / Math.tan(a2 * Math.PI / 180);
+    // 求交点坐标(圆心)
+    const tx = (y2 - y1 + k1 * x1 - k2 * x2) / (k1 - k2);
+    const ty = k1 * (tx - x1) + y1;
+    // 求起止角度
     const startAngle = (90 - k1) * Math.PI / 180;
     const endAngle = (90 - k2) * Math.PI / 180;
-    const cosStart = Math.abs(Math.cos(startAngle));
-    const sinStart = Math.abs(Math.sin(startAngle));
-    const cosEnd = Math.abs(Math.cos(endAngle));
-    const sinEnd = Math.abs(Math.sin(endAngle));
-    const x = (cosStart * x2 + cosEnd * x1) / (cosStart + cosEnd);
-    const y = (sinStart * y2 + sinEnd * y1) / (sinStart + sinEnd);
     
-    // 画圆弧
-    const r = Math.sqrt((x - x1) ** 2 + (y - y1) ** 2);
+    // 求两条线交点即为圆心
+    // const cosStart = Math.abs(Math.cos(startAngle));
+    // const sinStart = Math.abs(Math.sin(startAngle));
+    // const cosEnd = Math.abs(Math.cos(endAngle));
+    // const sinEnd = Math.abs(Math.sin(endAngle));
+    // const x = (cosStart * x2 + cosEnd * x1) / (cosStart + cosEnd);
+    // const y = (sinStart * y2 + sinEnd * y1) / (sinStart + sinEnd);
+    
+    // 求半径
+    const tr = Math.sqrt((tx - x1) ** 2 + (ty - y1) ** 2);
 
     const anticlockwise = (k2 - k1) > 0;
-    ctx.arc(x, y, r, startAngle, endAngle, anticlockwise);
+    ctx.beginPath();
+    ctx.arc(tx, ty, tr, startAngle, endAngle, anticlockwise);
+    
+    ctx.closePath();  
+    ctx.strokeStyle = '#FF00FF66';  
+    ctx.lineWidth = 9;  
+    ctx.stroke();   
+    console.log(`ctx.arc(${tx}, ${ty}, ${tr}, ${startAngle}, ${endAngle}, ${anticlockwise})`);
+    if (tr > 10) {aaa;}
+    // 测试代码
+    /*
+    ctx = document.getElementById('output_mask').getContext('2d');
+    ctx.clearRect(0, 0, 500, 500);
+    ctx.beginPath();
+   
+    ctx.closePath();
+    ctx.strokeStyle = '#FF00FF66';
+    ctx.lineWidth = 9;
+    ctx.stroke();
+    
+    
+    */
 }
 function drawHistory() {  
     const canvas = document.getElementById('output_mask');  
@@ -140,38 +178,35 @@ function drawHistory() {
         if (jointStates[i]) {  
             const points = history.map(item => ({ x: item[i].x, y: item[i].y, angle: item[i].direction }));  
              
-            ctx.beginPath();  
-            ctx.moveTo(points[0].x, points[0].y);  
-            for (let j = 1; j < points.length; j++) {  
-                ctx.lineTo(points[j].x, points[j].y); // —
-                // 在末端画个箭头
-                // 计算线段长度
-                const length = Math.sqrt((points[j].x - points[j-1].x) ** 2 + (points[j].y - points[j-1].y) ** 2);
-                const portion = 10 / length;
-                // 找到线段的5分位点
-                const x_ = points[j].x * (1 - portion) + points[j-1].x * portion;
-                const y_ = points[j].y * (1 - portion) + points[j-1].y * portion;
-                ctx.moveTo(x_ - (points[j].y - y_), y_ + (points[j].x - x_));// 箭头两个端点，有全等三角形模型
-                ctx.lineTo(points[j].x, points[j].y);// ⇀
-                ctx.lineTo(x_ + (points[j].y - y_), y_ - (points[j].x - x_));// →
-                ctx.moveTo(points[j].x, points[j].y);
-            }  
-            ctx.closePath();  
-            ctx.strokeStyle = '#00FFFF66';  
-            // 设置粗细
-            ctx.lineWidth = 3;  
-            ctx.stroke();  
+            // ctx.beginPath();  
+            // ctx.moveTo(points[0].x, points[0].y);  
+            // for (let j = 1; j < points.length; j++) {  
+            //     ctx.lineTo(points[j].x, points[j].y); // —
+            //     // 在末端画个箭头
+            //     // 计算线段长度
+            //     const length = Math.sqrt((points[j].x - points[j-1].x) ** 2 + (points[j].y - points[j-1].y) ** 2);
+            //     const portion = 10 / length;
+            //     // 找到线段的5分位点
+            //     const x_ = points[j].x * (1 - portion) + points[j-1].x * portion;
+            //     const y_ = points[j].y * (1 - portion) + points[j-1].y * portion;
+            //     ctx.moveTo(x_ - (points[j].y - y_), y_ + (points[j].x - x_));// 箭头两个端点，有全等三角形模型
+            //     ctx.lineTo(points[j].x, points[j].y);// ⇀
+            //     ctx.lineTo(x_ + (points[j].y - y_), y_ - (points[j].x - x_));// →
+            //     ctx.moveTo(points[j].x, points[j].y);
+            // }  
+            // ctx.closePath();  
+            // ctx.strokeStyle = '#00FFFF66';  
+            // // 设置粗细
+            // ctx.lineWidth = 3;  
+            // ctx.stroke();  
             // 画圆弧
-            ctx.beginPath();  
+            
             for (let j = 1; j < points.length; j++) {  
                 // 先求圆心
                 drawArc(ctx, points[j-1].x, points[j-1].y, points[j-1].angle, points[j].x, points[j].y, points[j].angle);
                 
             }  
-            ctx.closePath();  
-            ctx.strokeStyle = '#FF00FF66';  
-            ctx.lineWidth = 9;  
-            ctx.stroke();   
+
 
         }  
     }  

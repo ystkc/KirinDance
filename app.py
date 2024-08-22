@@ -94,7 +94,7 @@ def video_generator():
         if current_frame_count >= standard_total_frames:
             # 通过socket通知客户端停止
             socketio.emit('stop')
-            print('standard_cap video playing finished')
+            standard_cap.release()
             break
         time_now = time.time()
         if (time_now - time_start) * 1000 < frame_period * frame_count: # 帧率限制，因为frame是没有缓存的
