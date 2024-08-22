@@ -146,7 +146,9 @@ def video_feed():
 
 def message_generator():
     while True:
-        time.sleep(0.1)
+        time.sleep(0.2)
+        if standard_total_frames == 0:
+            continue
         progress_percentage = ((current_frame_count) / standard_total_frames) * 100
         yield f"data: progress${progress_percentage}#name$progress\n\n"
 
