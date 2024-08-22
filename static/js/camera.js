@@ -69,6 +69,7 @@ window.onload = function(){
       document.getElementById('pause').click();
       return;
     }
+    paused = false;
     enabled_1 = true;
 
     source = new EventSource('/message');
@@ -118,6 +119,7 @@ window.onload = function(){
     // 接收到stop后，再运行一次stop函数
     socket.on('stop', function () {
       enabled_1 = false;
+      paused = false;
       document.getElementById('stop').click();
     });
 
