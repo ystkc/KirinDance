@@ -56,7 +56,7 @@
   justify-content: space-evenly;
   display: flex;
   position: fixed;
-  bottom: 4rem;
+  bottom: 2rem;
 }
 .score {
   text-align: center;

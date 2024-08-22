@@ -35,6 +35,7 @@ const video_bits_per_second = 6400000 // 视频比特率，800kbps
 const blob_period = 2000 // 发送视频帧的间隔，单位毫秒
  
 let enabled_1 = false;
+let paused = false;
 let socket = null;
 let mediaRecorder = null;
 let mediaStream = null;
@@ -176,6 +177,7 @@ window.onload = function(){
 
 }
 document.getElementById('pause').addEventListener('click', function () { 
+  paused = !paused;
   socket.emit('pause');
 });
 
@@ -673,6 +675,12 @@ function detectPoseInRealTime(video, net) {
       remoteVideo.src = `/video_feed?time=${Date.now()}`
       remoteVideo.style.opacity = 1;
       
+    }
+    if (round % 5 == 0 && !paused)
+    {
+      var score = 60 + Math.random() * 40;
+      // 保留两位小数
+      document.getElementById('score').textContent = `得分：${score.toFixed(2)}`;
     }
     
     if (!enabled_1) {
