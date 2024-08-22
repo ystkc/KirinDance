@@ -154,7 +154,7 @@ function drawArc(ctx, x1, y1, a1, x2, y2, a2) {
     ctx.lineWidth = 9;  
     ctx.stroke();   
     console.log(`ctx.arc(${tx}, ${ty}, ${tr}, ${startAngle}, ${endAngle}, ${anticlockwise})`);
-    if (tr > 10) {aaa;}
+    // if (tr > 10) {aaa;}
     // 测试代码
     /*
     ctx = document.getElementById('output_mask').getContext('2d');

@@ -670,8 +670,7 @@ function detectPoseInRealTime(video, net) {
     round++;
     if (round == 1){
       // 已经完成首次渲染，开始加载标准视频
-      
-      remoteVideo.src = '/video_feed'
+      remoteVideo.src = `/video_feed?time=${Date.now()}`
       remoteVideo.style.opacity = 1;
       
     }
