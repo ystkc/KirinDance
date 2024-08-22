@@ -363,7 +363,7 @@ def get_pose_angles(img):
         print(f"Error in get_pose_angles: {e}")
         return None
     
-def preprocess_standard_video(standard_video_path, progress_var, progress_label, total_frames, cache_path):
+def preprocess_standard_video(standard_video_path, total_frames, cache_path):
     cap = cv2.VideoCapture(standard_video_path)
     standard_data = []
 
