@@ -418,4 +418,4 @@ if __name__ == '__main__':
     # 每次启动执行cls
     os.system('cls')
 
-    socketio.run(app, debug=True)
+    app.run(debug=True, host='127.0.0.1', port=8860, request_handler=MyRequestHandler)

@@ -1,0 +1,104 @@
+<html>  
+    <canvas id="output_mask" width="500" height="500"></canvas>
+    <script>
+        // 获取鼠标按下和弹起时的坐标
+        let isMouseDown = false;
+        let startX, startY, endX, endY;
+        let ctx = document.getElementById('output_mask').getContext('2d');
+        document.getElementById('output_mask').addEventListener('mousedown', function(e) {
+            if (!isMouseDown) {ctx.clearRect(0, 0, 500, 500);}
+            isMouseDown = true;
+            startX = e.clientX - this.offsetLeft;
+            startY = e.clientY - this.offsetTop;
+        });
+        document.getElementById('output_mask').addEventListener('mouseup', function(e) {
+            isMouseDown = false;
+            endX = e.clientX - this.offsetLeft;
+            endY = e.clientY - this.offsetTop;
+            var alpha = 0;
+            if (endX - startX > 0) {
+                alpha = -Math.atan((endY - startY) / (endX - startX)) * 180 / Math.PI;
+            } else {
+                if (endY - startY > 0)
+                    alpha = Math.atan((endX - startX) / (endY - startY)) * 180 / Math.PI - 90;
+                else
+                    alpha = Math.atan((endX - startX) / (endY - startY)) * 180 / Math.PI + 90;
+            }
+            drawArc(ctx, startX, startY, endX, endY, alpha);
+        });
+        
+        // 角度转弧度
+        function toRadius(angle) {
+            return angle * Math.PI / 180;
+        }
+    </script>
+</html>
+
+
+<script>
+function drawArc(ctx, x1, y1, x2, y2, a2) {
+    // 先用绿色画出两个点连线
+    console.log(x1, y1, x2, y2, a2);
+    ctx.beginPath();
+    ctx.moveTo(x1, y1);
+    ctx.lineTo(x2, y2);
+    ctx.strokeStyle = '#00FF00';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.closePath();
+    // 计算两切点处的圆心连线斜率(也就是垂线)
+    a2 = 0;
+    const k2 = Math.tan(toRadius(a2));
+    const sign = Math.sign(k2);
+    console.log(k2);
+    // 求交点坐标(圆心)，自行解方程(AI最怕的就是代数方程,死活不会解)
+    // 方程如下：圆心(x0,y0)半径r，效果：过两点，切终点方向线
+    // (x1 - x0)^2 + (y1 - y0)^2 = r^2
+    // (x2 - x0)^2 + (y2 - y0)^2 = r^2
+    // y0 = -1 / k2 * (x0 - x2) + y2
+    const r = ((x1 - x2) ** 2 + (y1 - y2) ** 2) / 2 / (Math.abs(y1 - y2) / Math.sqrt(1 + k2 ** 2) + Math.abs(x1 - x2) / Math.sqrt(1 + 1 / (k2 ** 2)));
+    var x0, y0;
+    if (y2 < y1 && x2 < x1) {
+        x0 = x2 + r / Math.sqrt(1 + 1 / (k2 ** 2));
+        y0 = y2 + r / Math.sqrt(1 + k2 ** 2);
+    } else {
+        x0 = x2 + r / Math.sqrt(1 + 1 / (k2 ** 2));
+        y0 = y2 + r / Math.sqrt(1 + k2 ** 2);
+    }
+    // 求起止角度，用点和圆心连线的斜率求夹角
+    const kv1 = (y1 - y0) / (x1 - x0);
+    const kv2 = (y2 - y0) / (x2 - x0);
+    const startAngle = toRadius(Math.atan(kv1));
+    const endAngle = toRadius(Math.atan(kv2));
+    const anticlockwise = (y2 - y1) * (x1 - x2) - (x2 - x1) * (y1 - y2) < 0;
+
+    ctx.beginPath();
+    ctx.arc(x0, y0, r, 0, 2 * Math.PI, anticlockwise);
+    
+    ctx.closePath();
+    ctx.strokeStyle = '#FF00FF66';  
+    ctx.lineWidth = 9;  
+    ctx.stroke();   
+      
+    ctx.beginPath();
+    ctx.arc(x0, y0, 10, 0, 2 * Math.PI, anticlockwise);
+    ctx.closePath();
+    ctx.fillStyle = '#FF00FF66';
+    ctx.fill(); 
+    console.log(`ctx.arc(${x0}, ${y0}, ${r}, ${startAngle}, ${endAngle}, ${anticlockwise})`);
+    // if (tr > 10) {aaa;}
+    // 测试代码
+    /*
+    ctx = document.getElementById('output_mask').getContext('2d');
+    ctx.clearRect(0, 0, 500, 500);
+    ctx.beginPath();
+   
+    ctx.closePath();
+    ctx.strokeStyle = '#FF00FF66';
+    ctx.lineWidth = 9;
+    ctx.stroke();
+    
+    
+    */
+}
+</script>

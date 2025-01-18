@@ -114,6 +114,9 @@ function updateHistory(positions, directions) {
     // 将positions中每个项与directions合并，然后加入history
     history.push(positions.map((pos, i) => ({...pos, direction: directions[i]})));
 }  
+function toRadius(degree){
+    return degree * Math.PI / 180; // ctx.arc使用的角度单位为弧度
+}
 function drawArc(ctx, x1, y1, a1, x2, y2, a2) {
     // 先用绿色画出两个点连线
     console.log(x1, y1, a1, x2, y2, a2);
@@ -124,36 +127,44 @@ function drawArc(ctx, x1, y1, a1, x2, y2, a2) {
     ctx.lineWidth = 2;
     ctx.stroke();
     ctx.closePath();
-    // 计算两切点处的圆心连线斜率
-    const k1 = -1 / Math.tan(a1 * Math.PI / 180);
-    const k2 = -1 / Math.tan(a2 * Math.PI / 180);
-    // 求交点坐标(圆心)
-    const tx = (y2 - y1 + k1 * x1 - k2 * x2) / (k1 - k2);
-    const ty = k1 * (tx - x1) + y1;
-    // 求起止角度
-    const startAngle = (90 - k1) * Math.PI / 180;
-    const endAngle = (90 - k2) * Math.PI / 180;
-    
-    // 求两条线交点即为圆心
-    // const cosStart = Math.abs(Math.cos(startAngle));
-    // const sinStart = Math.abs(Math.sin(startAngle));
-    // const cosEnd = Math.abs(Math.cos(endAngle));
-    // const sinEnd = Math.abs(Math.sin(endAngle));
-    // const x = (cosStart * x2 + cosEnd * x1) / (cosStart + cosEnd);
-    // const y = (sinStart * y2 + sinEnd * y1) / (sinStart + sinEnd);
-    
-    // 求半径
-    const tr = Math.sqrt((tx - x1) ** 2 + (ty - y1) ** 2);
-
+    // 计算两切点处的圆心连线斜率(也就是垂线)
+    const k1 = Math.tan(toRadius(a1));
+    const k2 = Math.tan(toRadius(a2));
+    // 求交点坐标(圆心)，自行解方程(AI最怕的就是代数方程,死活不会解)
+    // 方程如下：圆心(x0,y0)半径r，效果：过两点，切终点方向线
+    // (x1 - x0)^2 + (y1 - y0)^2 = r^2
+    // (x2 - x0)^2 + (y2 - y0)^2 = r^2
+    // y0 = -1 / k2 * (x0 - x2) + y2
+    const r = ((x1 - x2) ** 2 + (y1 - y2) ** 2) / 2 / (Math.abs(y1 - y2) / Math.sqrt(1 + k2 ** 2) + Math.abs(x1 - x2) / Math.sqrt(1 + 1 / (k2 ** 2)));
+    var x0, y0;
+    if (y2 < y1) {
+        x0 = x2 + r / Math.sqrt(1 + 1 / (k2 ** 2));
+        y0 = y2 + r / Math.sqrt(1 + k2 ** 2);
+    } else {
+        x0 = x2 - r / Math.sqrt(1 + 1 / (k2 ** 2));
+        y0 = y2 - r / Math.sqrt(1 + k2 ** 2);
+    }
+    // 求起止角度，用点和圆心连线的斜率求夹角
+    const kv1 = (y1 - y0) / (x1 - x0);
+    const kv2 = (y2 - y0) / (x2 - x0);
+    const startAngle = toRadius(Math.atan(kv1));
+    const endAngle = toRadius(Math.atan(kv2));
     const anticlockwise = (k2 - k1) > 0;
+
     ctx.beginPath();
-    ctx.arc(tx, ty, tr, startAngle, endAngle, anticlockwise);
+    ctx.arc(x0, y0, r, startAngle, endAngle, anticlockwise);
     
-    ctx.closePath();  
+    ctx.closePath();
     ctx.strokeStyle = '#FF00FF66';  
     ctx.lineWidth = 9;  
     ctx.stroke();   
-    console.log(`ctx.arc(${tx}, ${ty}, ${tr}, ${startAngle}, ${endAngle}, ${anticlockwise})`);
+      
+    ctx.beginPath();
+    ctx.arc(x0, y0, 10, 0, 2 * Math.PI, anticlockwise);
+    ctx.closePath();
+    ctx.fillStyle = '#FF00FF66';
+    ctx.fill(); 
+    console.log(`ctx.arc(${x0}, ${y0}, ${r}, ${startAngle}, ${endAngle}, ${anticlockwise})`);
     // if (tr > 10) {aaa;}
     // 测试代码
     /*
