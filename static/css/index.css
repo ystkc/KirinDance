@@ -1,3 +1,22 @@
+.footer-text {
+  max-width: 600px;
+  text-align: center;
+}
+
+@media only screen and (max-width: 600px) {
+.footer-text, .dg {
+  display: none;
+}
+}
+.modal {
+  transition: opacity 0.5s;
+  background: rgba(0,0,0,0.5);
+}
+.modal-content {
+  transition: transform 0.5s;
+}
+
+
 .btn-group {
   flex-basis: 100%;
   display: flex;
@@ -52,13 +71,12 @@
 
 .footer {
   width: 50%;
-  margin-left: 25%;
+  margin-top: 1rem;
   justify-content: space-evenly;
   display: flex;
-  position: fixed;
-  bottom: 2rem;
 }
 .score {
+  margin-top: -1rem;
   text-align: center;
   font-size: 2rem;
   font-weight: bold;

@@ -1,5 +1,13 @@
+
+
+
 /**
  * @license
+ * Modifications Copyright 2025 Cereanilla/SYSU SIC. All Rights Reserved.
+ * 
+ *    NOTICES FROM ORIGINAL PROJECT:
+ *    Original Project: https://github.com/tensorflow/tfjs-models/tree/master/pose-detection
+ *    Original Demo: https://storage.googleapis.com/tfjs-models/demos/posenet/camera.html
  * Copyright 2018 Google Inc. All Rights Reserved.
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -13,12 +21,140 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  * =============================================================================
+ * 
+ * 
  */
-// import * as posenet from '@tensorflow-models/posenet';
-// import dat from 'dat.gui';
-// import Stats from 'stats.js';
 
-// import {drawBoundingBox, drawKeypoints, drawSkeleton, isMobile, toggleLoadingUI, tryResNetButtonName, tryResNetButtonText, updateTryResNetButtonDatGuiCss} from './demo_util';
+// 模态框展示模块
+function showModal(content = '', title = '', callback = null) {
+  const modalId = `modal-${Date.now()}`;
+  const modal = document.createElement('div');
+  
+  modal.className = 'modal hide';
+  modal.id = modalId;
+  modal.setAttribute('data-status', 'hidden');
+  modal.innerHTML = `
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <span class="modal-close-btn" onclick="toggleModal(null, '${modalId}')">×</span>
+      ${title ? `<div class="modal-title">${title}</div>` : ''}
+      <div class="modal-body">${content}</div>
+      ${callback ? '<div class="modal-footer"></div>' : ''}
+    </div>
+  `;
+
+  modal.onclick = (e) => toggleModal(e, modalId);
+
+  if (callback) {
+    const footer = modal.querySelector('.modal-footer');
+    footer.innerHTML = `
+      <div class="btn deny-btn">取消</div>
+      <div class="btn confirm-btn">确认</div>
+    `;
+    footer.querySelector('.confirm-btn').onclick = (e) => { 
+      toggleModal(null, modalId);
+      callback(e);
+    };
+    footer.querySelector('.deny-btn').onclick = () => toggleModal(null, modalId);
+  }
+
+  document.body.appendChild(modal);
+  toggleModal(null, modalId); // 初始化显示动画
+}
+
+// 切换模态框状态
+function toggleModal(event, modalId = '') {
+  if (event?.target?.classList.contains('modal')) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+
+    const status = modal.getAttribute('data-status');
+    const content = modal.querySelector('.modal-content');
+    
+    modal.setAttribute('data-status', status === 'show' ? 'hidden' : 'show');
+    
+    if (status === 'show') {
+      content.style.transform = 'scale(0.9)';
+      modal.style.opacity = 0;
+      setTimeout(() => modal.remove(), 500);
+    } else {
+      modal.classList.remove('hide');
+      content.style.transform = 'scale(0.9)';
+      setTimeout(() => {
+        content.style.transform = 'scale(1)';
+        modal.style.opacity = 1;
+      }, 10);
+    }
+  }
+}
+
+function hideAllModals() {
+  document.querySelectorAll('.modal').forEach((modal)=>{
+    if (modal.getAttribute('data-status') =='show') {
+      modal.click();
+    }
+  })
+}
+
+// 相机模块
+
+function initCamera(){
+  if (socket == null || !socket.connected) {
+      socket = new WebSocket(`ws://${location.host}/ws`);
+      send_ws_msg('start');
+  }
+  // check if the camera is available
+  if (!localVideo.srcObject || !localVideo.srcObject.active) {
+      navigator.mediaDevices.getUserMedia({ video: true, audio: false })
+      .then(stream => {
+          mediaStream = stream;
+          mediaRecorder = new MediaRecorder(stream, {  
+              mimeType: 'video/webm; codecs=vp9', // 可以根据需要调整 MIME 类型和编解码器  
+              videoBitsPerSecond: video_bits_per_second, // 视频比特率  
+              width: width,
+              height: height,
+              frameRate: standard_frame_rate 
+          });
+          mediaRecorder.ondataavailable = event => {  
+              // event.data 是一个 Blob，包含了录制的视频片段
+              accumulated_size_blob += event.data.size;
+              // 获取视频帧数
+              console.log(`Emitted a video BLOB, BPS: ${accumulated_size_blob / blob_period * 1000}`)
+              if (event.data && event.data.size > 0) {  
+                  // 将Blob转换为Frames
+
+                  const reader = new FileReader();
+                  reader.readAsArrayBuffer(event.data);
+                  reader.onload = () => {
+                      const arrayBuffer = reader.result;
+                      const uint8Array = new Uint8Array(arrayBuffer);
+                      const frames = [];
+                      let frame_size = 0;
+                      for (let i = 0; i < uint8Array.length; i++) {
+                          frame_size += uint8Array[i];
+                          if (frame_size === 0) {
+                              frames.push(i);
+                              frame_size = 0;
+                          }
+                      }
+                      
+                      // 发送视频帧数
+                      send_ws_msg(`video_info{"frames":${frames.length}}`);
+                  }
+              }  
+          };  
+          mediaRecorder.start(blob_period); // 开始录制 , 2000ms 为一个blob
+          // initFrameCapture(stream);
+
+          localVideo.srcObject = stream; // 显示本地画面
+      })
+      .catch(err => {
+          console.error('Error accessing camera: ', err);
+      });
+  }
+}
+
+
+
 
 
 // User-defined Configuration
@@ -50,7 +186,34 @@ let mask_left = null;
 
 // let accumulated_size_frame = 0;
 // let accumulated_size_blob = 0;
-
+function connect_ws() {
+  socket = new WebSocket(`ws://${location.host}/ws`);
+  
+  socket.onmessage = function(event) {
+    msg = event.data;
+    // 接收到stop后，再运行一次stop函数
+    if (msg == 'stop') {
+      enabled_1 = false;
+      paused = false;
+      document.getElementById('stop').click();
+    };
+    if (msg.slice(0,5) == 'video') {
+      data = JSON.parse(msg.slice(5));
+      // 显示远程画面
+      remoteVideo.src = URL.createObjectURL(data);
+    }
+  };
+}
+function send_ws_msg(msg) {
+  if (socket && socket.readyState == 1) {
+    socket.send(msg);
+  } else {
+    connect_ws();
+    setTimeout(function() {
+      send_ws_msg(msg);
+    }, 1000);
+  }
+}
 window.onload = function(){
   remoteVideo = document.getElementById('remoteVideo');
   localVideo = document.getElementById('output');
@@ -114,14 +277,9 @@ window.onload = function(){
       }
     };
     // initCamera();// 旧版，在后端处理视频帧
-    socket = io.connect(`http://${window.location.hostname}:${window.location.port}`);
-    socket.emit('start');
-    // 接收到stop后，再运行一次stop函数
-    socket.on('stop', function () {
-      enabled_1 = false;
-      paused = false;
-      document.getElementById('stop').click();
-    });
+    socket = new WebSocket(`ws://${location.host}/ws`);
+    send_ws_msg('start');
+    
 
 
     setupFPS();
@@ -151,7 +309,7 @@ window.onload = function(){
     }
     // close the socket
     if (socket && socket.connected) {
-        socket.emit('stop');
+        send_ws_msg('stop');
         socket.disconnect();
     }
     if (remoteVideo.src) {
@@ -181,7 +339,7 @@ window.onload = function(){
 }
 document.getElementById('pause').addEventListener('click', function () { 
   paused = !paused;
-  socket.emit('pause');
+  send_ws_msg('pause');
 });
 
 
@@ -606,7 +764,7 @@ function detectPoseInRealTime(video, net) {
     // 先发送第一个人的信息给后端
     if (poses.length > 0 && socket && socket.connected) {
       let pose = poses[0];
-      socket.emit('pose', {
+      let payload = {
         score: pose.score,
         keypoints: pose.keypoints.map(keypoint => ({
           position: {
@@ -616,7 +774,8 @@ function detectPoseInRealTime(video, net) {
           score: keypoint.score,
           part: keypoint.part
         }))
-      });
+      };
+      send_ws_msg('pose' + JSON.stringify(payload));
     }
 
     

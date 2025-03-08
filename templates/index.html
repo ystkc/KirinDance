@@ -3,21 +3,6 @@
 
 <head>
     <title>迳口麒麟舞AI传承大师</title>
-    <style>
-
-    .footer-text {
-        max-width: 600px;
-        text-align: center;
-        margin: auto;
-    }
-
-    @media only screen and (max-width: 600px) {
-      .footer-text, .dg {
-        display: none;
-      }
-    }
-    
-    </style>
     <link rel="stylesheet" href="static/css/index.css">
     <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
@@ -43,41 +28,30 @@
             ">
             </video>
             <div style="position:relative;">
-                <canvas id="output" style="margin:2rem"></canvas>
+                <canvas id="output" style="margin-top:2rem;"></canvas>
                 <canvas id="output_mask" style="margin:2rem;position:absolute;top:0;right:0;z-index:100;"></canvas>
             </div>
             <img id='remoteVideo' style="margin:2rem;vertical-align: top;" />
         </div>  
-        <div>
-            <div class="round">
-                <progress id="progress" value="1" max="100"></progress>
-            </div>
+        <div id="score" class="score">得分：</div>
+        <div class="round">
+            <progress id="progress" value="1" max="100"></progress>
         </div>
-        <div>
-            <div>
-                <div id="score" class="score">得分：</div>
-            </div>
+        <div class="footer">
+            <div class="btn" id="start"><div>★Start</div></div>
+            <div class="btn" id="pause"><div>Pause</div></div>
+            <div class="btn" id="stop"><div>Stop</div></div>
         </div>
     </div>
-    <div class="footer">
-        <div class="btn" id="start"><div>★Start</div></div>
-        <div class="btn" id="pause"><div>Pause</div></div>
-        <div class="btn" id="stop"><div>Stop</div></div>
-    </div>
-    
-    <div class="fpsbox">
-
-    </div>
+    <div class="fpsbox" style="width: 100px;"></div>
     
     <script src="static/js/tf.min.js"></script>
     <script src="static/js/dat.gui.min.js"></script>
     <script src="static/js/posenet.min.js"></script>
     <script src="static/js/Stats.min.js"></script>
-    <script src="static/js/socket.io.min.js"></script>
     <script src="static/js/demo_util.js"></script>
-    <script src="static/js/script.js"></script>
     <script src="static/js/tracker.js"></script>
-    <script type="module" src="static/js/camera.js"></script>
+    <script type="module" src="static/mjs/camera.mjs"></script>
 
 
 </body>
