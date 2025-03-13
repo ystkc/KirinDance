@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 mp_pose = mp.solutions.pose
 pose = mp_pose.Pose(static_image_mode=True, min_detection_confidence=0.5)
 
-standard_video_path = "standard_video_1600k_540_15fps_6s.mp4"
+standard_video_path = "standard_video_1600k_540_15fps_64s.mp4"
 standard_frame_rate = 15  # 帧率
 frame_period = 1000 / standard_frame_rate  # 毫秒
 width = 540  # 观察画面尺寸（显卡性能限制，不掉帧即可）
