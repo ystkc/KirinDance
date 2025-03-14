@@ -11,285 +11,413 @@
         margin: 0;
         overflow: hidden;
       }
+      body div {
+        user-select: none;
+      }
     </style>
   </head>
   <body>
-    <div style="position:relative;">
-        <canvas id="drawArea"></canvas>
-        <canvas id="drawMask" style="position:absolute;top:0;right:0;z-index:5;"></canvas>
+    <div style="position: relative">
+      <canvas id="drawArea"></canvas>
+      <canvas
+        id="drawMask"
+        style="position: absolute; top: 0; right: 0; z-index: 5"
+      ></canvas>
     </div>
-    <div style="position:fixed;bottom:20px;left:0;z-index: 10;">
-    <div id="currentStrokeSpeed"></div>
-    <div id="currentStrokeAngle"></div>
-    <div>
+    <div style="position: fixed; bottom: 20px; left: 0; z-index: 10">
+      <div id="currentStrokeSpeed"></div>
+      <div id="currentStrokeAngle"></div>
+      <div>
         <button id="recordBtn">录制</button>
         <button id="replayBtn">播放</button>
-    </div>
+      </div>
     </div>
     <script>
-class Track {
-    typeToColor = (type) => {
-        switch(type){
-            case -1: return "rgba(135, 206, 250, 0.5)"; // 天蓝87ceeb99
-            case 0: return "rgba(128, 255, 208, 0.5)"; // #7fffd499 青色
-            case 1: return "rgba(255, 192, 203, 0.5)"; // #ffc0cb99 粉色
-            case -99: return "rgba(192, 192, 192, 0.1)"; // #c0c0c099 浅灰色，active，在部分现代浏览器中有水墨stroke效果
-            case 99: return "rgba(245, 222, 179, 0.5)"; // f5deb399 麦色，passive
+      class Track {
+        typeToColor = (type) => {
+          switch (type) {
+            case -1:
+              return "rgba(135, 206, 250, 0.5)"; // 天蓝87ceeb99
+            case 0:
+              return "rgba(128, 255, 208, 0.5)"; // #7fffd499 青色
+            case 1:
+              return "rgba(255, 192, 203, 0.5)"; // #ffc0cb99 粉色
+            case -99:
+              return "rgba(192, 192, 192, 0.1)"; // #c0c0c099 浅灰色，active，在部分现代浏览器中有水墨stroke效果
+            case -98:
+              return "rgba(64, 64, 64, 0.1)";
+            case 99:
+              return "rgba(245, 222, 179, 0.5)"; // f5deb399 麦色，passive
+          }
         };
-    }
-  constructor(ctx, passiveCtx) {
-    this.ctx = ctx;
-    this.passiveCtx = passiveCtx;
-    this.isDrawing = false;
-    this.onNode = false;
-    this.nodes = []; // 存储节点坐标的数组
-    this.detailNodes = []; // 存储详细轨迹的数组
-    this.standardNodes = []; // 标准轨迹的节点坐标数组
-    this.standardDetailNodes = []; // 标准轨迹的详细轨迹数组
-    this.standardNodesCnt = 0;
-    this.standardDetailCnt = 0;
-    this.score = []; // 标准轨迹和用户轨迹对比得分
-    this.lastPos = { x: 0, y: 0 }; // 记录上一次位置
-    this.lastPos2 = { x: 0, y: 0 }; // 记录上上次位置
-    this.lastSpeedCheck = 0; // 记录距离上一次速度检查的move数量
-    this.lastSpeedPos = { x: 0, y: 0, time: 0 }; // 记录上一次速度检查的位置和时间
-    this.strokeSpeed = 0; // 当前画笔速度
-    this.angle = 0; // 当前画笔角度
-    this.progress = 0; // Standard绘制进度(index)
-    this.nodeProgress = 0;// StandardNodes绘制进度(index)
-    this.startTime = 0; // Passive开始时间
-  }
-
-  startDrawing = (e, timestamp) => {
-    this.isDrawing = true;
-    let currentTime = 0;
-    if (typeof(timestamp) === 'undefined') currentTime = Date.now();
-    else currentTime = timestamp;
-
-    // 初始化绘制样式
-    this.ctx.beginPath();
-    this.ctx.lineWidth = 20;
-    this.ctx.lineCap = "round";
-    this.ctx.strokeStyle = this.typeToColor(-99); // active画笔颜色
-    this.ctx.moveTo(e.offsetX, e.offsetY);
-    this.progress = 0;
-    this.nodeProgress = 0;
-    this.startTime = currentTime;
-    this.passiveCtx.beginPath();
-    this.passiveCtx.lineWidth = 10;
-    this.passiveCtx.lineCap = "round";
-    this.passiveCtx.strokeStyle = this.typeToColor(99); // passive画笔颜色
-    this.passiveCtx.moveTo(e.offsetX, e.offsetY);
-  };
-
-  draw = (e, timestamp) => {
-    if (this.standardNodes.length !== 0){
-        this.passiveDraw(e, timestamp);
-    }
-    let currentTime = 0;
-    if (typeof(timestamp) === 'undefined') currentTime = Date.now();
-    else currentTime = timestamp;
-    if (!this.isDrawing) return;
-    if (this.onNode) {
-      this.onNode = false;
-      this.startDrawing(e);
-      return;
-    }
-
-    const currentX = e.offsetX;
-    const currentY = e.offsetY;
-    if (currentX === this.lastPos.x && currentY === this.lastPos.y) return;
-
-    // 绘制基础轨迹
-    this.ctx.lineTo(currentX, currentY);
-    this.ctx.stroke();
-
-    // 节点绘制逻辑
-    if (this.nodes.length < 2) {
-      // 第一个节点
-      this.nodes.push({ x: currentX, y: currentY, type: -1, time: currentTime , detailIndex: 0, prevDetailIndex: 0 });
-      this.drawNode(currentX, currentY, this.typeToColor(-1));
-    } else {
-      const lastNode = this.nodes[this.nodes.length - 1];
-      const lastNode2 = this.nodes[this.nodes.length - 2];
-      const manhattanDist = Math.abs(currentX - lastNode.x) + Math.abs(currentY - lastNode.y);
-
-      this.lastSpeedCheck++;
-      if (this.lastSpeedCheck > 3) {
-        this.lastSpeedCheck = 0;
-        this.calcSpeedAndAngle(currentX, currentY, currentTime);
-      }
-
-      // 条件判断
-      if (manhattanDist > 200 && this.strokeSpeed <= 200) {
-        this.nodes.push({ x: this.lastPos2.x, y: this.lastPos2.y, type: 0 , time: currentTime, detailIndex: this.detailNodes.length, prevDetailIndex: lastNode.detailIndex });
-        this.drawNode(this.lastPos2.x, this.lastPos2.y, this.typeToColor(0));
-        this.lastSpeedCheck = 0; // 防止一个节点连续出现多个节点（与节点距离过小，容易出现测量错误）
-        this.angle = 0;
-        this.strokeSpeed = 9999;
-      } else if (manhattanDist > 100 && (this.angle > 45 || this.angle < -45)) {
-        this.nodes.push({ x: this.lastPos2.x, y: this.lastPos2.y, type: 1 , time: currentTime, detailIndex: this.detailNodes.length, prevDetailIndex: lastNode.detailIndex });
-        this.drawNode(this.lastPos2.x, this.lastPos2.y, this.typeToColor(1));
-        this.lastSpeedCheck = 0;
-        this.angle = 0;
-        this.strokeSpeed = 9999;
-      }
-    }
-
-    // 更新位置记录
-    this.lastPos2 = { x: this.lastPos.x, y: this.lastPos.y };
-    this.lastPos = { x: currentX, y: currentY };
-  };
-  pushData = (standardData) => { // 传入标准数据
-    const { nodes, detailNodes } = standardData;
-    this.standardNodes = nodes;
-    this.standardDetailNodes = detailNodes;
-    this.standardNodesCnt = nodes.length;
-    this.standardDetailCnt = detailNodes.length;
-  }
-  popData = () => {
-    this.standardNodes = [];
-    this.standardDetailNodes = [];
-    this.standardNodesCnt = 0;
-    this.standardDetailCnt = 0;
-    this.score = [];
-  }
-  passiveDraw = (e, timestamp) => { // 和draw功能相同，但节点是由pushData传入的数据决定（而不是由e决定）
-    let currentTime = 0;
-    if (typeof(timestamp) === 'undefined') currentTime = Date.now();
-    else currentTime = timestamp;
-    const currentX = e.offsetX;
-    const currentY = e.offsetY;
-    if (onNode) {
-      this.onNode = false;
-      this.startDrawing(e);
-      return;
-    }
-    while (timestamp > this.startTime + this.standardDetailNodes[progress].time && progress < this.standardDetailCnt) {
-        this.detailNodes.push({x: currentX, y: currentY, time: currentTime})
-        progress ++;
-    }
-    const cstd = this.standardDetailNodes[progress];
-    let standardX = cstd.x;
-    let standardY = cstd.y;
-
-    // 绘制基础轨迹
-    this.passiveCtx.lineTo(currentX, currentY);
-    this.passiveCtx.stroke();
-    // 绘制standard轨迹
-    this.ctx.lineTo(standardX, standardY);
-    this.ctx.stroke();
-    
-    let cstdn = this.standardNodes[nodeProgress];
-    while (currentTime > this.startTime + cstdn.time && nodeProgress < this.standardNodesCnt) {
-        // 计算上一段的残差平方和作为分数储存（消除起点偏移）
-        this.nodes.push({x: currentX, y: currentY, type: cstdn.type, time: currentTime})
-        let score = 0;
-        const deltaX = this.standardDetailNodes[cstdn.prevDetailIndex].x - this.detailNodes[cstdn.prevDetailIndex].x;
-        const deltaY = this.standardDetailNodes[cstdn.prevDetailIndex].y - this.detailNodes[cstdn.prevDetailIndex].y; // 标准轨迹和用户轨迹起点的差距
-        let stdRelativeX = 0, stdRelativeY = 0, usrRelativeX = 0, usrRelativeY = 0;
-
-        for (let i = cstdn.prevDetailIndex; i < cstdn.detailIndex; i++) {
-            RelativeX = this.standardDetailNodes[i].x - this.detailNodes[i].x - deltaX;
-            RelativeY = this.standardDetailNodes[i].y - this.detailNodes[i].y - deltaY;
-            score += RelativeX ** 2 + RelativeY ** 2;
+        constructor(ctx, passiveCtx) {
+          this.ctx = ctx;
+          this.passiveCtx = passiveCtx;
+          this.isDrawing = false;
+          this.onNode = false;
+          this.nodes = []; // 存储节点坐标的数组
+          this.detailNodes = []; // 存储详细轨迹的数组
+          this.standardNodes = []; // 标准轨迹的节点坐标数组
+          this.standardDetailNodes = []; // 标准轨迹的详细轨迹数组
+          this.standardNodesCnt = 0;
+          this.standardDetailCnt = 0;
+          this.score = []; // 标准轨迹和用户轨迹对比得分
+          this.lastPos = { x: 0, y: 0, time: 0 }; // 记录上一次位置
+          this.lastPos2 = { x: 0, y: 0, time: 0 }; // 记录上上次位置
+          this.lastSpeedCheck = 0; // 记录距离上一次速度检查的move数量
+          this.lastSpeedPos = { x: 0, y: 0, time: 0 }; // 记录上一次速度检查的位置和时间
+          this.strokeSpeed = 0; // 当前画笔速度
+          this.angle = 0; // 当前画笔角度
+          this.progress = 0; // Standard绘制进度(index)
+          this.nodeProgress = 0; // StandardNodes绘制进度(index)
+          this.startTime = 0; // Passive开始时间
         }
-        this.score[nodeProgress] = score;
-        // 将分数打印在passiveCtx的上一段轨迹的中间
-        const midStdPoint = this.standardDetailNodes[cstdn.detailIndex + cstdn.prevDetailIndex >> 1];
-        passiveCtx.beginPath();
-        passiveCtx.moveTo(midStdPoint.x, midStdPoint.y);
-        // 打印文字
-        passiveCtx.font = "20px Arial";
-        passiveCtx.fillStyle = "rgba(0, 0.5)";
-        passiveCtx.fillText(score.toFixed(2), midStdPoint.x - 10, midStdPoint.y - 10);
-        passiveCtx.closePath();
-        onNode = true;
-        nodeProgress ++;
-        cstdn = this.standardNodes[nodeProgress];
-    }
-    drawNode(cstdn.x, cstdn.y, this.typeToColor(cstdn.type)); // 绘制节点
-  }
 
-  calcSpeedAndAngle = (currentX, currentY, currentTime) => {
-    // 速度计算
-    this.strokeSpeed = (
-      ((Math.abs(currentX - this.lastSpeedPos.x) +
-        Math.abs(currentY - this.lastSpeedPos.y)) /
-      (currentTime - this.lastSpeedPos.time)) *
-      1000
-    ).toFixed(2);
-    document.getElementById("currentStrokeSpeed").innerHTML = `当前速度: ${this.strokeSpeed}px/s`;
+        startDrawing = (e, timestamp) => {
+          this.isDrawing = true;
+          let currentTime = 0;
+          if (typeof timestamp === "undefined") currentTime = Date.now();
+          else currentTime = timestamp;
 
-    // 角度计算
-    // 计算偏移向量
-    const prevNode = this.nodes[this.nodes.length - 1];
-    const prevVector = {
-      x: currentX - prevNode.x,
-      y: currentY - prevNode.y,
-    };
-    const currentVector = {
-      x: currentX - this.lastSpeedPos.x,
-      y: currentY - this.lastSpeedPos.y,
-    };
+          // 初始化绘制样式
+          this.ctx.beginPath();
+          this.ctx.lineWidth = 20;
+          this.ctx.lineCap = "round";
 
-    // 计算向量夹角
-    const dotProduct = prevVector.x * currentVector.x + prevVector.y * currentVector.y;
-    const magPrev = Math.sqrt(prevVector.x ** 2 + prevVector.y ** 2);
-    const magCurrent = Math.sqrt(currentVector.x ** 2 + currentVector.y ** 2);
-    this.angle = Math.acos(dotProduct / (magPrev * magCurrent)) * (180 / Math.PI);
-    document.getElementById("currentStrokeAngle").innerHTML = `当前角度: ${this.angle.toFixed(2)}°`;
+          if (this.standardNodesCnt !== 0) {
+            this.ctx.moveTo(
+              this.standardDetailNodes[this.progress].x,
+              this.standardDetailNodes[this.progress].y
+            );
+            this.ctx.strokeStyle = this.typeToColor(-99); // passive+active画笔颜色
+          } else {
+            this.ctx.moveTo(e.offsetX, e.offsetY);
+            this.ctx.strokeStyle = this.typeToColor(-99); // active画笔颜色
+          }
+          if (!this.startTime) this.startTime = currentTime;
+          this.passiveCtx.beginPath();
+          this.passiveCtx.lineWidth = 10;
+          this.passiveCtx.lineCap = "round";
+          this.passiveCtx.strokeStyle = this.typeToColor(99); // passive画笔颜色
+          this.passiveCtx.moveTo(e.offsetX, e.offsetY);
+        };
 
-    this.detailNodes.push(this.lastSpeedPos);
-    this.lastSpeedPos = { x: currentX, y: currentY, time: currentTime };
-  };
+        draw = (e, timestamp) => {
+          if (this.standardNodesCnt !== 0) {
+            this.passiveDraw(e, timestamp);
+            return;
+          }
+          let currentTime = 0;
+          if (typeof timestamp === "undefined")
+            currentTime = Date.now() - this.startTime;
+          else currentTime = timestamp;
+          if (!this.isDrawing) return;
+          if (this.onNode) {
+            this.onNode = false;
+            this.startDrawing(e);
+            return;
+          }
 
-  drawNode = (x, y, color = "rgba(0, 0, 0, 0.5)") => {
-    this.ctx.closePath();
-    this.ctx.beginPath();
-    this.ctx.lineWidth = 20;
-    // this.ctx.strokeStyle = "rgba(0, 0, 0, 0)";
-    this.ctx.arc(x, y, 20, 0, Math.PI * 2); // 30px直径
-    this.ctx.fillStyle = color;
-    this.ctx.fill();
-    this.ctx.closePath();
-    this.onNode = true;
+          const currentX = e.offsetX;
+          const currentY = e.offsetY;
+          if (currentX === this.lastPos.x && currentY === this.lastPos.y)
+            return;
 
-    return;
-    // 连接lastNode，并作中垂线
-    const lastNode = this.nodes[this.nodes.length - 1];
-    this.ctx.beginPath();
-    this.ctx.lineWidth = 10;
-    this.ctx.strokeStyle = "rgba(245, 222, 179, 0.5)"; // f5deb399 麦色
-    this.ctx.moveTo(lastNode.x, lastNode.y);
-    this.ctx.lineTo(x, y);
-    this.ctx.stroke();
-    this.ctx.closePath();
-  };
+          // 绘制基础轨迹
+          this.ctx.lineTo(currentX, currentY);
+          this.ctx.stroke();
 
-  endDrawing = (e) => {
-    if (!this.isDrawing) return;
-    this.draw(e); // 处理最后一段数据
-    this.ctx.closePath();
-    this.isDrawing = false;
-    this.lastPos = { x: 0, y: 0 };
-    this.lastPos2 = { x: 0, y: 0 };
-    this.lastSpeedPos = { x: 0, y: 0, time: 0 };
-    this.lastSpeedCheck = 0;
+          // 节点绘制逻辑
+          if (this.nodes.length < 2) {
+            // 第一个节点
+            this.nodes.push({
+              x: currentX,
+              y: currentY,
+              type: -1,
+              time: currentTime,
+              detailIndex: 0,
+              prevDetailIndex: 0,
+            });
+            this.drawNode(currentX, currentY, this.typeToColor(-1));
+          } else {
+            const lastNode = this.nodes[this.nodes.length - 1];
+            const lastNode2 = this.nodes[this.nodes.length - 2];
+            const manhattanDist =
+              Math.abs(currentX - lastNode.x) + Math.abs(currentY - lastNode.y);
 
-    // 1秒后清除画布
-    setTimeout(() => {
-        if (this.standardNodes.length !== 0)
-            this.ctx.clearRect(0, 0, canvas.width, canvas.height);
-        this.nodes = [];
-        this.detailNodes = [];
-        this.score = [];
-    }, 1000);
+            this.lastSpeedCheck++;
+            if (this.lastSpeedCheck > 2) {
+              this.lastSpeedCheck = 0;
+              this.calcSpeedAndAngle(currentX, currentY, currentTime);
+            }
 
-    this.result = { nodes: this.nodes.slice(1), detailNodes: this.detailNodes.slice(1), score: this.score };
-  };
-}
-      
+            // 条件判断
+            if (manhattanDist > 200 && this.strokeSpeed <= 200) {
+              this.nodes.push({
+                x: this.lastPos2.x,
+                y: this.lastPos2.y,
+                type: 0,
+                time: currentTime,
+                detailIndex: this.detailNodes.length,
+                prevDetailIndex: lastNode.detailIndex,
+              });
+              this.drawNode(
+                this.lastPos2.x,
+                this.lastPos2.y,
+                this.typeToColor(0)
+              );
+              this.lastSpeedCheck = 0; // 防止一个节点连续出现多个节点（与节点距离过小，容易出现测量错误）
+              this.angle = 0;
+              this.strokeSpeed = 9999;
+            } else if (
+              manhattanDist > 100 &&
+              (this.angle > 45 || this.angle < -45)
+            ) {
+              this.nodes.push({
+                x: this.lastPos2.x,
+                y: this.lastPos2.y,
+                type: 1,
+                time: currentTime,
+                detailIndex: this.detailNodes.length,
+                prevDetailIndex: lastNode.detailIndex,
+              });
+              this.drawNode(
+                this.lastPos2.x,
+                this.lastPos2.y,
+                this.typeToColor(1)
+              );
+              this.lastSpeedCheck = 0;
+              this.angle = 0;
+              this.strokeSpeed = 9999;
+            }
+          }
+
+          // 更新位置记录
+          this.lastPos2 = {
+            x: this.lastPos.x,
+            y: this.lastPos.y,
+            time: this.lastPos.time,
+          };
+          this.lastPos = { x: currentX, y: currentY, time: currentTime };
+        };
+        pushData = (standardData) => {
+          // 传入标准数据
+          const { nodes, detailNodes } = standardData;
+          this.standardNodes = nodes;
+          this.standardDetailNodes = detailNodes;
+          this.standardNodesCnt = nodes.length;
+          this.standardDetailCnt = detailNodes.length;
+        };
+        popData = () => {
+          this.standardNodes = [];
+          this.standardDetailNodes = [];
+          this.standardNodesCnt = 0;
+          this.standardDetailCnt = 0;
+          this.score = [];
+        };
+        passiveDraw = (e, timestamp) => {
+          // 和draw功能相同，但节点是由pushData传入的数据决定（而不是由e决定）
+          // 如果用户不移动鼠标，此函数会不被调用导致卡顿，但由于最终是由定频率姿态检测输入，不会出现这种情况
+          if (
+            !this.isDrawing ||
+            this.progress >= this.standardDetailCnt ||
+            this.nodeProgress >= this.standardNodesCnt
+          )
+            return;
+          let currentTime = 0;
+          if (typeof timestamp === "undefined")
+            currentTime = Date.now() - this.startTime;
+          else currentTime = timestamp;
+          const currentX = e.offsetX;
+          const currentY = e.offsetY;
+          if (this.onNode) {
+            this.onNode = false;
+            this.startDrawing(e);
+            return;
+          }
+          while (currentTime > this.standardDetailNodes[this.progress].time) {
+            this.detailNodes.push({
+              x: currentX,
+              y: currentY,
+              time: currentTime,
+            });
+            this.progress++;
+            if (this.progress == this.standardDetailCnt) return;
+          }
+          const cstd = this.standardDetailNodes[this.progress];
+          let standardX = cstd.x;
+          let standardY = cstd.y;
+
+          // 绘制基础轨迹
+          this.passiveCtx.lineTo(currentX, currentY);
+          this.passiveCtx.stroke();
+          // 绘制standard轨迹
+          this.ctx.lineTo(standardX, standardY);
+          this.ctx.stroke();
+
+          let cstdn = this.standardNodes[this.nodeProgress];
+          if (cstdn.type === -1)
+            this.drawNode(cstdn.x, cstdn.y, this.typeToColor(cstdn.type)); // 绘制节点
+          while (currentTime > cstdn.time) {
+            // 计算上一段的残差平方和作为分数储存（消除起点偏移）
+            this.nodes.push({
+              x: currentX,
+              y: currentY,
+              type: cstdn.type,
+              time: currentTime,
+            });
+            let score = 0;
+            const deltaX =
+              this.standardDetailNodes[cstdn.prevDetailIndex].x -
+              this.detailNodes[cstdn.prevDetailIndex].x;
+            const deltaY =
+              this.standardDetailNodes[cstdn.prevDetailIndex].y -
+              this.detailNodes[cstdn.prevDetailIndex].y; // 标准轨迹和用户轨迹起点的差距
+            let relativeX = 0,
+              relativeY = 0;
+
+            for (let i = cstdn.prevDetailIndex; i < cstdn.detailIndex; i++) {
+              relativeX =
+                this.standardDetailNodes[i].x - this.detailNodes[i].x - deltaX;
+              relativeY =
+                this.standardDetailNodes[i].y - this.detailNodes[i].y - deltaY;
+              score += relativeX ** 2 + relativeY ** 2;
+            }
+            score = Math.max(100 - score / 1000 / (cstdn.detailIndex - cstdn.prevDetailIndex), 0).toFixed(0);
+            // 除以节点数量，防止标准轨迹长度过长导致分数过低（或反之亦然）
+            this.score[this.nodeProgress] = score;
+            this.onNode = true;
+            this.nodeProgress++;
+            this.drawNode(currentX, currentY, this.typeToColor(99)); // 绘制用户轨迹节点
+            const midPoint =
+              this.detailNodes[
+                (cstdn.detailIndex + cstdn.prevDetailIndex) >> 1
+              ]; // 上一段的中点
+
+            if (this.nodeProgress > 1) {
+              // 跳过第一段起点节点的分数绘制
+              // 将分数打印在passiveCtx的上一段轨迹的中间
+              passiveCtx.beginPath();
+              passiveCtx.moveTo(midPoint.x, midPoint.y);
+              passiveCtx.font = "20px Arial";
+              passiveCtx.fillStyle = "rgba(0, 0.5)";
+              passiveCtx.fillText(
+                score,
+                midPoint.x - 10,
+                midPoint.y - 10
+              );
+              passiveCtx.closePath();
+            }
+            if (this.nodeProgress < this.standardNodesCnt) {
+              cstdn = this.standardNodes[this.nodeProgress]; // 画出下一段的标准节点
+              this.drawNode(cstdn.x, cstdn.y, this.typeToColor(cstdn.type));
+            } else return;
+          }
+        };
+
+        calcSpeedAndAngle = (currentX, currentY, currentTime) => {
+          // 速度计算
+          if (this.lastSpeedPos.time === 0) {
+            this.lastSpeedPos = { x: currentX, y: currentY, time: currentTime };
+          }
+          this.strokeSpeed = (
+            ((Math.abs(currentX - this.lastSpeedPos.x) +
+              Math.abs(currentY - this.lastSpeedPos.y)) /
+              (currentTime - this.lastSpeedPos.time)) *
+            1000
+          ).toFixed(2);
+          document.getElementById(
+            "currentStrokeSpeed"
+          ).innerHTML = `当前速度: ${this.strokeSpeed}px/s`;
+
+          // 角度计算
+          // 计算偏移向量
+          const prevNode = this.nodes[this.nodes.length - 1];
+          const prevVector = {
+            x: currentX - prevNode.x,
+            y: currentY - prevNode.y,
+          };
+          const currentVector = {
+            x: currentX - this.lastSpeedPos.x,
+            y: currentY - this.lastSpeedPos.y,
+          };
+
+          // 计算向量夹角
+          const dotProduct =
+            prevVector.x * currentVector.x + prevVector.y * currentVector.y;
+          const magPrev = Math.sqrt(prevVector.x ** 2 + prevVector.y ** 2);
+          const magCurrent = Math.sqrt(
+            currentVector.x ** 2 + currentVector.y ** 2
+          );
+          this.angle =
+            Math.acos(dotProduct / (magPrev * magCurrent)) * (180 / Math.PI);
+          document.getElementById(
+            "currentStrokeAngle"
+          ).innerHTML = `当前角度: ${this.angle.toFixed(2)}°`;
+
+          this.lastSpeedPos.time = currentTime;
+          this.detailNodes.push(this.lastSpeedPos);
+          this.lastSpeedPos = { x: currentX, y: currentY, time: currentTime };
+        };
+
+        drawNode = (x, y, color = "rgba(0, 0, 0, 0.5)") => {
+          this.ctx.closePath();
+          this.ctx.beginPath();
+          this.ctx.lineWidth = 20;
+          this.ctx.arc(x, y, 20, 0, Math.PI * 2); // 30px直径
+          this.ctx.fillStyle = color;
+          this.ctx.fill();
+          this.ctx.closePath();
+          this.onNode = true;
+
+          return;
+          // 连接lastNode，并作中垂线
+          const lastNode = this.nodes[this.nodes.length - 1];
+          this.ctx.beginPath();
+          this.ctx.lineWidth = 10;
+          this.ctx.strokeStyle = this.typeToColor(99);
+          this.ctx.moveTo(lastNode.x, lastNode.y);
+          this.ctx.lineTo(x, y);
+          this.ctx.stroke();
+          this.ctx.closePath();
+        };
+
+        endDrawing = (e) => {
+          if (!this.isDrawing) return;
+          this.draw(e); // 处理最后一段数据
+          this.ctx.closePath();
+          this.isDrawing = false;
+          this.lastPos = { x: 0, y: 0 };
+          this.lastPos2 = { x: 0, y: 0 };
+          this.lastSpeedPos = { x: 0, y: 0, time: 0 };
+          this.lastSpeedCheck = 0;
+          this.progress = 0;
+          this.nodeProgress = 0;
+          this.startTime = 0;
+
+          // 去除time偏移量
+          let timeOffset = Math.min(
+            this.nodes[0].time,
+            this.detailNodes[0].time
+          );
+          for (let i = 0; i < this.nodes.length; i++) {
+            this.nodes[i].time -= timeOffset;
+          }
+          for (let i = 0; i < this.detailNodes.length; i++) {
+            this.detailNodes[i].time -= timeOffset;
+          }
+          this.result = {
+            nodes: this.nodes.slice(1),
+            detailNodes: this.detailNodes,
+            score: this.score,
+          };
+
+          this.nodes = [];
+          this.detailNodes = [];
+          this.score = [];
+        };
+      }
+
       const canvas = document.getElementById("drawArea");
       const ctx = canvas.getContext("2d");
       const passiveCanvas = document.getElementById("drawMask");
@@ -311,19 +439,24 @@ class Track {
       passiveCanvas.addEventListener("mouseup", track.endDrawing);
       passiveCanvas.addEventListener("mouseout", track.endDrawing);
       document.getElementById("recordBtn").addEventListener("click", () => {
+        passiveCtx.clearRect(0, 0, passiveCanvas.width, passiveCanvas.height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
         resultBuffer = null;
         track.popData();
       });
       document.getElementById("replayBtn").addEventListener("click", () => {
+        passiveCtx.clearRect(0, 0, passiveCanvas.width, passiveCanvas.height);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
         if (!resultBuffer) {
-            resultBuffer = track.result;
-            // 去除time偏移量
-            let timeOffset = resultBuffer.nodes[0].time;
-            for (let i = 0; i < resultBuffer.nodes.length; i++) {
-                resultBuffer.nodes[i].time -= timeOffset;
-            }
+          resultBuffer = track.result;
         }
         track.pushData(resultBuffer);
+        track.drawNode(
+          track.standardNodes[0].x,
+          track.standardNodes[0].y,
+          track.typeToColor(track.standardNodes[0].type)
+        );
       });
     </script>
   </body>
