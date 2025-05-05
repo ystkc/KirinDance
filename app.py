@@ -131,6 +131,7 @@ async def websocket_endpoint(websocket: WebSocket):
     try:
         while True:
             data = await websocket.receive_text()
+            print(f"websocket receive: {data}")
             if data == 'start':
                 stopped = False
             elif data == 'stop':

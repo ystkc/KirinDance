@@ -1,59 +1,136 @@
 <!DOCTYPE html>
 <html>
-
-<head>
+  <head>
     <title>迳口麒麟舞AI传承大师</title>
-    <link rel="stylesheet" href="static/css/index.css">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
+    <link rel="stylesheet" href="static/css/index.css" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
 
-<body style="background-image: url('static/img/background.png');background-repeat: no-repeat;background-size: cover;">
-    
-    <div id="info" style='display:none'>
-    </div>
-    <div id="loading">
-        Loading the model...
-    </div>
-    <div id="test">
-        
-    </div>
+  <body
+    style="
+      background-image: url('static/img/background.png');
+      background-repeat: no-repeat;
+      background-size: cover;
+    "
+  >
+    <div id="info" style="display: none"></div>
+    <div id="loading">Loading the model...</div>
+    <div id="test"></div>
 
-    <div class='main' id="main">
-        <div style="display:flex;flex-direction:row;">
-            <video id="video" playsinline style=" -moz-transform: scaleX(-1);
-            -o-transform: scaleX(-1);
-            -webkit-transform: scaleX(-1);
-            transform: scaleX(-1);
-            display: none;
-            ">
-            </video>
-            <div style="position:relative;">
-                <canvas id="output" style="margin-top:2rem;"></canvas>
-                <canvas id="output_mask" style="margin:2rem;position:absolute;top:0;right:0;z-index:100;"></canvas>
-            </div>
-            <img id='remoteVideo' style="margin:2rem;vertical-align: top;" />
-        </div>  
-        <div id="score" class="score">得分：</div>
-        <div class="round">
-            <progress id="progress" value="1" max="100"></progress>
+    <div class="main" id="main">
+      <div style="display: flex; flex-direction: row">
+        <div class="canvas-container">
+          <video id="localVideo" class="video" playsinline></video>
+          <canvas id="skeletonCanvas"></canvas>
+          <canvas id="canvas"></canvas>
+          <canvas id="passiveCanvas"></canvas>
         </div>
-        <div class="footer">
-            <div class="btn" id="start"><div>★Start</div></div>
-            <div class="btn" id="pause"><div>Pause</div></div>
-            <div class="btn" id="stop"><div>Stop</div></div>
+        <div class="canvas-container">
+          <video id="remoteVideo" class="video" playsinline></video>
         </div>
+      </div>
+      <div id="score" class="score">得分：</div>
+      <div class="round">
+        <progress id="progress" value="1" max="100"></progress>
+      </div>
+      <div class="footer">
+        <div class="btn" id="start"><div>★Start</div></div>
+        <div class="btn" id="pause"><div>Pause</div></div>
+        <div class="btn" id="stop"><div>Stop</div></div>
+      </div>
     </div>
-    <div class="fpsbox" style="width: 100px;"></div>
-    
+    <div class="fpsbox" style="width: 100px"></div>
+    <script>
+      // 模态框展示模块
+      function showModal(content = "", title = "", callback = null) {
+        const modalId = `modal-${Date.now()}`;
+        const modal = document.createElement("div");
+
+        modal.className = "modal";
+        modal.id = modalId;
+        modal.setAttribute("data-status", "show");
+        modal.innerHTML = `
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <span class="modal-close-btn" onclick="toggleModal(null, '${modalId}')">×</span>
+      ${title ? `<div class="modal-title">${title}</div>` : ""}
+      <div class="modal-body">${content}</div>
+      ${callback ? '<div class="modal-footer"></div>' : ""}
+    </div>
+  `;
+
+        modal.onclick = (e) => toggleModal(e, modalId);
+
+        if (callback) {
+          const footer = modal.querySelector(".modal-footer");
+          footer.innerHTML = `
+      <div class="btn deny-btn">取消</div>
+      <div class="btn confirm-btn">确认</div>
+    `;
+          footer.querySelector(".confirm-btn").onclick = (e) => {
+            toggleModal(null, modalId);
+            callback(e);
+          };
+          footer.querySelector(".deny-btn").onclick = () =>
+            toggleModal(null, modalId);
+        }
+
+        document.body.appendChild(modal);
+        toggleModal(null, modalId); // 初始化显示动画
+      }
+
+      // 切换模态框状态
+      function toggleModal(event, modalId = "") {
+        if (event?.target?.classList.contains("modal")) {
+          const modal = document.getElementById(modalId);
+          if (!modal) return;
+
+          const status = modal.getAttribute("data-status");
+          const content = modal.querySelector(".modal-content");
+
+          modal.setAttribute(
+            "data-status",
+            status === "show" ? "hidden" : "show"
+          );
+
+          if (status === "show") {
+            content.style.transform = "scale(0.9)";
+            modal.style.opacity = 0;
+            setTimeout(() => modal.remove(), 500);
+          } else {
+            modal.classList.remove("hide");
+            content.style.transform = "scale(0.9)";
+            setTimeout(() => {
+              content.style.transform = "scale(1)";
+              modal.style.opacity = 1;
+            }, 10);
+          }
+        }
+      }
+
+      function hideAllModals() {
+        document.querySelectorAll(".modal").forEach((modal) => {
+          if (modal.getAttribute("data-status") == "show") {
+            modal.click();
+          }
+        });
+      }
+    </script>
     <script src="static/js/tf.min.js"></script>
     <script src="static/js/dat.gui.min.js"></script>
-    <script src="static/js/posenet.min.js"></script>
+    <!-- PosNet -->
+    <!-- <script src="static/js/posenet.min.js"></script> -->
+    <!-- MoveNet -->
+    <script src="static/js/pose-detection.min.js"></script>
     <script src="static/js/Stats.min.js"></script>
     <script src="static/js/demo_util.js"></script>
-    <script src="static/js/tracker.js"></script>
+    <script src="static/js/new_tracker.js"></script>
+    <script src="static/js/testdata.js"></script>
     <script type="module" src="static/mjs/camera.mjs"></script>
 
-
-</body>
-
+    <script>
+        setTimeout(() => {
+          debugger;
+        }, 100000);
+    </script>
+  </body>
 </html>

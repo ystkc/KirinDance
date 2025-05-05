@@ -114,7 +114,8 @@ function drawSkeleton(keypoints, minConfidence, ctx, scale = 1) {
  */
 function drawKeypoints(keypoints, minConfidence, ctx, scale = 1) {
   // 暂时不画头部
-  for (let i = 5; i < keypoints.length; i++) {
+  for (let i = 0; i < keypoints.length; i++) {
+    if (i > 0 && i < 5) continue;
     const keypoint = keypoints[i];
 
     if (keypoint.score < minConfidence) {

@@ -63,12 +63,39 @@
   padding: 0.5rem 0.3rem 0.3rem 0.5rem;
   box-shadow: inset 0.4rem 0.4rem 0.1rem 0 rgba(0, 0, 0, 0.2);;
 }
+.canvas-container{
+  margin: 2rem;
+  padding-top: -10rem;
+  padding-left: -10rem;
+  position: relative;
+  width: 540px;
+  height: 405px;
+}
+.canvas-container video {
+  opacity: 0.1 !important; /* 测试，方便观察 */
+  width: 540px;
+  height: 405px;
+  -moz-transform: scaleX(-1);
+  -o-transform: scaleX(-1);
+  -webkit-transform: scaleX(-1);
+  transform: scaleX(-1);
+}
+.canvas-container canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 540px;
+  height: 405px;
+  user-select: none;
+}
 .btn.disabled {
   opacity: 0.6;
   transform: none !important;
   cursor: not-allowed;
 }
-
+.hide {
+  display: none !important;
+}
 .footer {
   width: 50%;
   margin-top: 1rem;

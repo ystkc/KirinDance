@@ -10,3 +10,4 @@
 /node_modules
 /static/bin_unzipped
 /archiev
+*.pyc
