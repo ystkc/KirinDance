@@ -199,7 +199,7 @@ window.onload = function () {
       throw e;
     }
 
-    detectPoseInRealTime(video);
+    detectPoseInRealTime(video, false);
   });
 
   document.getElementById("stop").addEventListener("click", function () {
@@ -343,14 +343,14 @@ let round = 0;
 let waiting = 0;
 
 // 姿态计算
-function detectPoseInRealTime(video, net) {
+function detectPoseInRealTime(video, recording) {
   if (guiState.net == null) {
     if (waiting == 0) {
       waiting = 1;
-      showModal("提示", "模型正在加载，请稍后...");
+      showModal("模型正在加载，请稍后...", "提示");
     }
     setTimeout(() => {
-      detectPoseInRealTime(video, net);
+      detectPoseInRealTime(video, recording);
     }, 1000);
     return;
   }
@@ -372,7 +372,6 @@ function detectPoseInRealTime(video, net) {
   round = 0;
   // 初始化Action和ActionRecorder
   let action = new Action(canvas, passiveCanvas, skeletonCanvas);
-  const recording = true;
   if (!recording) action.pushData(testData);
 
   let actionRecorder = new ActionRecorder(skeletonCanvas);
@@ -510,7 +509,7 @@ function detectPoseInRealTime(video, net) {
         action.draw({keypoints: weightedKeypoints}, Date.now());
       } else {
         const actionScore = action.passiveDraw({keypoints: weightedKeypoints}, Date.now());
-        if (actionScore !== null) {
+        if (actionScore !== 0) {
           document.getElementById(
             "score"
           ).textContent = `得分：${actionScore.toFixed(2)}`;

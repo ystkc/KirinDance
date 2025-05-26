@@ -78,10 +78,11 @@ class Track {
     if (this.standardNodesCnt !== 0) {
       return this.passiveDraw(e, timestamp);
     }
-    let currentTime = 0, nodesIndex = null;
+    let currentTime = 0;
     if (typeof timestamp === "undefined")
       currentTime = Date.now() - this.startTime;
     else currentTime = timestamp - this.startTime;
+
     if (!this.isDrawing) return null;
     if (this.onNode) {
       this.onNode = false;
@@ -99,6 +100,7 @@ class Track {
     this.ctx.stroke();
     let manhattanDist = 0;
     // 节点绘制逻辑
+    let nodesIndex = null;
     if (this.nodes.length < 2) {
       // 第一个节点
       this.nodes.push({
@@ -125,7 +127,10 @@ class Track {
       }
 
       // 条件判断
-      if (manhattanDist > Track.minNodesSpacingI && this.strokeSpeed <= Track.maxSpeed) {
+      if (
+        manhattanDist > Track.minNodesSpacingI &&
+        this.strokeSpeed <= Track.maxSpeed
+      ) {
         this.nodes.push({
           x: this.lastPos2.x,
           y: this.lastPos2.y,
@@ -139,7 +144,10 @@ class Track {
         this.angle = 0;
         this.strokeSpeed = 9999;
         nodesIndex = this.nodes.length - 1;
-      } else if (manhattanDist > Track.minNodesSpacingII && (this.angle > Track.minAngleAbs || -this.angle > Track.minAngleAbs)) {
+      } else if (
+        manhattanDist > Track.minNodesSpacingII &&
+        (this.angle > Track.minAngleAbs || -this.angle > Track.minAngleAbs)
+      ) {
         this.nodes.push({
           x: this.lastPos2.x,
           y: this.lastPos2.y,
@@ -159,11 +167,13 @@ class Track {
     // 更新位置记录
     this.lastPos2 = this.lastPos;
     this.lastPos = { x: currentX, y: currentY };
-    return {i: nodesIndex, d: manhattanDist};
+    return { index: nodesIndex, distance: manhattanDist };
   };
   pushData = (standardData) => {
     // 传入标准数据
+    // console.log(standardData);
     const { nodes, detailNodes } = standardData;
+    // console.log(nodes, detailNodes);
     this.standardNodes = nodes;
     this.standardDetailNodes = detailNodes;
     this.standardNodesCnt = nodes.length;
@@ -179,17 +189,23 @@ class Track {
   passiveDraw = (e, timestamp) => {
     // 和draw功能相同，但节点是由pushData传入的数据决定（而不是由e决定）
     // 如果用户不移动鼠标，此函数会不被调用导致卡顿，但由于最终是由定频率姿态检测输入，不会出现这种情况
+
     let score = 0;
-      if (
+
+    if (
       !this.isDrawing ||
       this.progress >= this.standardDetailCnt ||
       this.nodeProgress >= this.standardNodesCnt
     )
       return score;
+
     let currentTime = 0;
     if (typeof timestamp === "undefined")
       currentTime = Date.now() - this.startTime;
     else currentTime = timestamp - this.startTime;
+
+    if (e.offsetX === null)
+      e = { offsetX: this.lastPos.x, offsetY: this.lastPos.y };
     const currentX = e.offsetX;
     const currentY = e.offsetY;
     if (this.onNode) {
@@ -197,6 +213,7 @@ class Track {
       this.startDrawing(e);
       return score;
     }
+    // console.log(currentTime, this.progress, this.standardDetailNodes, this.standardNodes);
     while (currentTime > this.standardDetailNodes[this.progress].time) {
       this.detailNodes.push({
         x: currentX,
@@ -208,8 +225,12 @@ class Track {
     }
     const cstd = this.standardDetailNodes[this.progress];
 
-    const isMajor = this.standardNodes[this.nodeProgress].hasOwnProperty("m");
-    if (isMajor) {
+    const isMajor = this.standardNodes[this.nodeProgress].hasOwnProperty(
+      "major"
+    )
+      ? this.standardNodes[this.nodeProgress].major
+      : false;
+    if (true) {
       // 绘制基础轨迹
       this.passiveCtx.moveTo(this.lastPos.x, this.lastPos.y);
       this.passiveCtx.lineTo(currentX, currentY);
@@ -223,7 +244,7 @@ class Track {
       }
     }
 
-    const cstdn = this.standardNodes[this.nodeProgress];
+    let cstdn = this.standardNodes[this.nodeProgress];
     if (cstdn.type === -1)
       this.drawNode(cstdn.x, cstdn.y, this.typeToColor(cstdn.type)); // 绘制节点
     while (currentTime > cstdn.time) {
@@ -234,48 +255,53 @@ class Track {
         type: cstdn.type,
         time: currentTime,
       });
-      const deltaX =
-        this.standardDetailNodes[cstdn.prevDetailIndex].x -
-        this.detailNodes[cstdn.prevDetailIndex].x;
-      const deltaY =
-        this.standardDetailNodes[cstdn.prevDetailIndex].y -
-        this.detailNodes[cstdn.prevDetailIndex].y; // 标准轨迹和用户轨迹起点的差距
-      let relativeX = 0,
-        relativeY = 0;
+      // 计算score
+      if (cstdn.detailIndex > cstdn.prevDetailIndex) {
+        const deltaX =
+          this.standardDetailNodes[cstdn.prevDetailIndex].x -
+          this.detailNodes[cstdn.prevDetailIndex].x;
+        const deltaY =
+          this.standardDetailNodes[cstdn.prevDetailIndex].y -
+          this.detailNodes[cstdn.prevDetailIndex].y; // 标准轨迹和用户轨迹起点的差距
+        let relativeX = 0,
+          relativeY = 0;
 
-      for (let i = cstdn.prevDetailIndex; i < cstdn.detailIndex; i++) {
-        relativeX =
-          this.standardDetailNodes[i].x - this.detailNodes[i].x - deltaX;
-        relativeY =
-          this.standardDetailNodes[i].y - this.detailNodes[i].y - deltaY;
-        score += relativeX ** 2 + relativeY ** 2;
-      }
-      score = Math.max(
-        100 - score / 1000 / (cstdn.detailIndex - cstdn.prevDetailIndex),
-        0
-      ).toFixed(0);
-      // 除以节点数量，防止标准轨迹长度过长导致分数过低（或反之亦然）
+        for (let i = cstdn.prevDetailIndex; i < cstdn.detailIndex; i++) {
+          relativeX =
+            this.standardDetailNodes[i].x - this.detailNodes[i].x - deltaX;
+          relativeY =
+            this.standardDetailNodes[i].y - this.detailNodes[i].y - deltaY;
+          score += relativeX ** 2 + relativeY ** 2;
+        }
+        score = parseInt(
+          Math.max(
+            100 - score / 1000 / (cstdn.detailIndex - cstdn.prevDetailIndex),
+            0
+          )
+        );
+        // 除以节点数量，防止标准轨迹长度过长导致分数过低（或反之亦然）
+      } else score = 0; // 起点节点不计算分数
       this.score[this.nodeProgress] = score;
       this.onNode = true;
-      this.nodeProgress++;
       this.drawNode(currentX, currentY, this.typeToColor(99)); // 绘制用户轨迹节点
+      // 绘制分数
       const midPoint =
         this.detailNodes[(cstdn.detailIndex + cstdn.prevDetailIndex) >> 1]; // 上一段的中点
 
       if (this.nodeProgress > 1) {
         // 跳过第一段起点节点的分数绘制
         // 将分数打印在passiveCtx的上一段轨迹的中间
-        passiveCtx.beginPath();
-        passiveCtx.moveTo(midPoint.x, midPoint.y);
-        passiveCtx.font = "20px Arial";
-        passiveCtx.fillStyle = "rgba(0, 0.5)";
-        passiveCtx.fillText(score, midPoint.x - 10, midPoint.y - 10);
-        passiveCtx.closePath();
+        this.passiveCtx.beginPath();
+        this.passiveCtx.moveTo(midPoint.x, midPoint.y);
+        this.passiveCtx.font = "20px Arial";
+        this.passiveCtx.fillStyle = "rgba(0, 0.5)";
+        this.passiveCtx.fillText(score, midPoint.x - 10, midPoint.y - 10);
+        this.passiveCtx.closePath();
       }
-      if (this.nodeProgress < this.standardNodesCnt) {
-        cstdn = this.standardNodes[this.nodeProgress]; // 画出下一段的标准节点
-        this.drawNode(cstdn.x, cstdn.y, this.typeToColor(cstdn.type));
-      } else return score;
+      this.nodeProgress++;
+      if (this.nodeProgress >= this.standardNodesCnt) return score;
+      cstdn = this.standardNodes[this.nodeProgress]; // 画出下一段的标准节点
+      this.drawNode(cstdn.x, cstdn.y, this.typeToColor(cstdn.type));
     }
     this.lastPos = { x: currentX, y: currentY };
     return score;
@@ -428,11 +454,10 @@ class Track {
 
   endDrawing = (timestamp) => {
     if (!this.isDrawing) return;
-    let currentTime = 0;
-    if (typeof timestamp === "undefined")
-      currentTime = Date.now() - this.startTime;
-    else currentTime = timestamp - this.startTime;
-    this.draw({offsetX: this.lastPos.x+1, offsetY: this.lastPos.y+1}, currentTime); // 处理最后一段数据
+    this.draw(
+      { offsetX: this.lastPos.x + 1, offsetY: this.lastPos.y + 1 },
+      timestamp
+    ); // 处理最后一段数据
     this.ctx.closePath();
     this.isDrawing = false;
     this.lastPos = { x: 0, y: 0 };
@@ -443,15 +468,6 @@ class Track {
     this.nodeProgress = 0;
     this.startTime = 0;
 
-    // 去除time偏移量
-    if (this.detailNodes.length == 0) return;
-    let timeOffset = Math.min(this.nodes[0].time, this.detailNodes[0].time);
-    for (let i = 0; i < this.nodes.length; i++) {
-      this.nodes[i].time -= timeOffset;
-    }
-    for (let i = 0; i < this.detailNodes.length; i++) {
-      this.detailNodes[i].time -= timeOffset;
-    }
     this.result = {
       nodes: this.nodes.slice(1),
       detailNodes: this.detailNodes,
@@ -496,7 +512,8 @@ class Action {
 14, 16, rightKnee-rightAnkle
 11, 12 leftHip-rightHip*/
   seg = [
-    5, 6, 5, 7, 5, 11, 7, 9, 6, 8, 6, 12, 8, 10, 11, 13, 13, 15, 12, 14, 14, 16, 11, 12,
+    5, 6, 5, 7, 5, 11, 7, 9, 6, 8, 6, 12, 8, 10, 11, 13, 13, 15, 12, 14, 14, 16,
+    11, 12,
   ];
   segCnt = 12;
   actionTypeToColor = (type) => {
@@ -539,9 +556,117 @@ class Action {
     ];
     this.action = [];
   }
+  deflateData = (data) => {
+    // 对于本类的输出数据压缩可以达到20%的压缩率，还可以使用gzip进一步压缩
+    const newAction = [];
+    for (const action of data.action) {
+      const newTracker = [];
+      for (const nodeIndex of Object.keys(action.nodes)) {
+        newTracker.push(parseInt(nodeIndex)); // 关节编号
+        newTracker.push(action.nodes[nodeIndex].index); // 在关节节点中的索引
+        newTracker.push(parseInt(action.nodes[nodeIndex].distance)); // float距离
+        newTracker.push(
+          action.nodes[nodeIndex].hasOwnProperty("major")
+            ? action.nodes[nodeIndex].major
+            : 0
+        ); // 是否是关键点
+      }
+      newTracker.push(action.time); // 相对时间戳，ms
+      newAction.push(newTracker);
+    }
+    const newTresults = [];
+    for (const tresult of data.tresults) {
+      // 每个关节的轨迹数据
+      const newNodes = [];
+      if (tresult !== undefined)
+        for (const node of tresult.nodes) {
+          // 关键点
+          newNodes.push(parseInt(node.x)); // 坐标
+          newNodes.push(parseInt(node.y));
+          newNodes.push(node.type); // 置信度
+          newNodes.push(node.time); // 相对时间戳，ms
+          newNodes.push(node.detailIndex); // 详细轨迹索引
+          newNodes.push(node.prevDetailIndex); // 前一个详细轨迹索引
+        }
+      newTresults.push(newNodes);
+      const newDetailNodes = [];
+      if (tresult !== undefined)
+        for (const detailNode of tresult.detailNodes) {
+          // 详细轨迹
+          newDetailNodes.push(parseInt(detailNode.x)); // 坐标
+          newDetailNodes.push(parseInt(detailNode.y));
+          newDetailNodes.push(detailNode.time); // 相对时间戳，ms
+        }
+      newTresults.push(newDetailNodes);
+    }
+    return [newAction, newTresults];
+  };
+  reconstructData = (compressed) => {
+    const [compressedAction, compressedTresults] = compressed;
+    const data = { action: [], tresults: [] };
+
+    // 还原 action 数据
+    for (const compressedTracker of compressedAction) {
+      const action = {
+        nodes: {},
+        time: compressedTracker[compressedTracker.length - 1],
+      };
+      let index = 0;
+      while (index < compressedTracker.length - 1) {
+        const nodeIndex = compressedTracker[index++];
+        const nodeInnerIndex = compressedTracker[index++];
+        const distance = compressedTracker[index++];
+        const isMajor = compressedTracker[index++] === 1;
+        action.nodes[nodeIndex] = {
+          index: nodeInnerIndex,
+          distance: distance,
+          ...(isMajor ? { major: 1 } : {}),
+        };
+      }
+      data.action.push(action);
+    }
+
+    // 还原 tresults 数据
+    for (let i = 0; i < compressedTresults.length; i += 2) {
+      const nodes = [];
+      const detailNodes = [];
+
+      const newNodes = compressedTresults[i];
+      let index = 0;
+      while (index < newNodes.length) {
+        const x = newNodes[index++];
+        const y = newNodes[index++];
+        const type = newNodes[index++];
+        const time = newNodes[index++];
+        const detailIndex = newNodes[index++];
+        const prevDetailIndex = newNodes[index++];
+        nodes.push({
+          x: x,
+          y: y,
+          type: type,
+          time: time,
+          detailIndex: detailIndex,
+          prevDetailIndex: prevDetailIndex,
+        });
+      }
+
+      const newDetailNodes = compressedTresults[i + 1];
+      index = 0;
+      while (index < newDetailNodes.length) {
+        const x = newDetailNodes[index++];
+        const y = newDetailNodes[index++];
+        const time = newDetailNodes[index++];
+        detailNodes.push({ x: x, y: y, time: time });
+      }
+      data.tresults.push({ nodes: nodes, detailNodes: detailNodes });
+    }
+
+    return data;
+  };
+
   pushData = (poseData) => {
     // 结构：{actions, tresults}
-    const { action, tresults } = poseData;
+    const { action, tresults } = this.reconstructData(poseData);
     this.standardActions = action;
     this.standardActionsCnt = action.length;
     for (let i = 0; i < tresults.length; i++) {
@@ -555,9 +680,13 @@ class Action {
     for (let i = 0; i < this.segCnt; i++) {
       const start = this.seg[i << 1];
       const end = this.seg[(i << 1) | 1];
-      if (positions[start].offsetX === null || positions[end].offsetX === null) continue;
+      if (positions[start].offsetX === null || positions[end].offsetX === null)
+        continue;
       this.skeletonCtx.beginPath();
-      this.skeletonCtx.moveTo(positions[start].offsetX, positions[start].offsetY);
+      this.skeletonCtx.moveTo(
+        positions[start].offsetX,
+        positions[start].offsetY
+      );
       this.skeletonCtx.lineTo(positions[end].offsetX, positions[end].offsetY);
       this.skeletonCtx.strokeStyle = this.actionTypeToColor(0);
       this.skeletonCtx.lineWidth = 8;
@@ -570,7 +699,13 @@ class Action {
         continue;
       }
       this.skeletonCtx.beginPath();
-      this.skeletonCtx.arc(positions[i].offsetX, positions[i].offsetY, 8, 0, Math.PI * 2);
+      this.skeletonCtx.arc(
+        positions[i].offsetX,
+        positions[i].offsetY,
+        8,
+        0,
+        Math.PI * 2
+      );
       this.skeletonCtx.fillStyle = this.actionTypeToColor(1);
       this.skeletonCtx.fill();
       this.skeletonCtx.closePath();
@@ -578,10 +713,7 @@ class Action {
   };
   startDrawing = (pose, timestamp) => {
     this.isDrawing = true;
-    let currentTime = 0;
-    if (typeof timestamp === "undefined") currentTime = Date.now();
-    else this.startTime = currentTime;
-    
+    this.startTime = timestamp;
     // PosNet:
     // const position = pose.keypoints.map((keypoint) => ({
     //   x: keypoint.position.x,
@@ -593,28 +725,26 @@ class Action {
       y: keypoint.y,
     }));
     for (let i = 0; i < this.trackers.length; i++) {
-      this.trackers[i].startDrawing(position[i], currentTime);
+      this.trackers[i].startDrawing(position[i], timestamp);
     }
   };
   markMajor = (actionNodes) => {
     // 将d最大的2个节点标记为major节点
-    let maxD = 0, maxI = null;
+    let maxD = 0,
+      maxI = null;
     for (const nodes of Object.keys(actionNodes)) {
-      if (actionNodes[nodes].d > maxD) {
-        maxD = actionNodes[nodes].d;
+      if (actionNodes[nodes].distance > maxD) {
+        maxD = actionNodes[nodes].distance;
         maxI = nodes;
       }
       // 如果有多个major节点，则只标记一个。因此先将所有m标签去除
-      if (actionNodes[nodes].hasOwnProperty("m")) delete actionNodes[nodes].m;
+      if (actionNodes[nodes].hasOwnProperty("m"))
+        delete actionNodes[nodes].major;
     }
-    if (maxI !== null) actionNodes[maxI].m = 1; // 用hasOwnProperty判断major节点。如果是null说明全0，不标记
-  }
+    if (maxI !== null) actionNodes[maxI].major = 1; // 用hasOwnProperty判断major节点。如果是null说明全0，不标记
+  };
   draw = (pose, timestamp) => {
-    let currentTime = 0,
-      score = null;
-    if (typeof timestamp === "undefined")
-      currentTime = Date.now() - this.startTime;
-    else currentTime = timestamp - this.startTime;
+    let score = null;
 
     const positions = pose.keypoints.map((keypoint) => ({
       offsetX: keypoint.position.x,
@@ -626,15 +756,17 @@ class Action {
     let actionNodesCnt = 0;
     for (let i = 0; i < positions.length; i++) {
       // if (i!== 0)continue; // 测试
-      if ((i > 0 && i < 5) || positions[i].offsetX === null) { // 外部已经将置信度过低的节点替换成null
+      if ((i > 0 && i < 5) || positions[i].offsetX === null) {
+        // 外部已经将置信度过低的节点替换成null
         continue;
       }
-      const nodesInfo = this.trackers[i].draw(positions[i], currentTime);
-      if (nodesInfo !== null && nodesInfo.i !== null) actionNodes[i] = nodesInfo, actionNodesCnt++;
+      const nodesInfo = this.trackers[i].draw(positions[i], timestamp);
+      if (nodesInfo !== null && nodesInfo.index !== null)
+        (actionNodes[i] = nodesInfo), actionNodesCnt++;
     }
     if (actionNodesCnt === 0) return score;
     // 遇到了动作节点
-    if (currentTime - this.lastActionTime < 1000) {
+    if (timestamp - this.lastActionTime < 1000) {
       // ms，如果是frame需要调参
       const prevActionNodes = this.action[this.action.length - 1].nodes;
       // 动作节点连续，合并(无需处理tracker逻辑，零碎节点误判不会影响动作回放)
@@ -643,7 +775,6 @@ class Action {
           prevActionNodes[nodes] = actionNodes[nodes];
       this.markMajor(prevActionNodes);
       this.action[this.action.length - 1].nodes = prevActionNodes;
-
     } else {
       // 每个动作清空一次ctx和passiveCtx，避免过于混乱
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
@@ -654,31 +785,33 @@ class Action {
         this.passiveCanvas.height
       );
       this.markMajor(actionNodes);
-      this.action.push({ nodes: actionNodes, time: currentTime });
-      this.lastActionTime = currentTime;
+      this.action.push({
+        nodes: actionNodes,
+        time: timestamp - this.startTime,
+      });
+      this.lastActionTime = timestamp;
     }
     return score;
   };
   passiveDraw = (pose, timestamp) => {
-    let currentTime = 0, score = 0;
-    if (typeof timestamp === "undefined")
-      currentTime = Date.now() - this.startTime;
-    else currentTime = timestamp - this.startTime;
+    let score = 0;
 
     const positions = pose.keypoints.map((keypoint) => ({
       offsetX: keypoint.position.x,
       offsetY: keypoint.position.y,
     }));
     this.drawSkeletons(positions);
-    for (let i = 0; i < this.trackers.length; i++) {
-      let subScore = this.trackers[i].passiveDraw(positions[i], currentTime);
-      if (subScore !== null) this.accumulatedScore += subScore, this.accumulatedNodesCnt++;
+    // 如果遇到动作节点了，先清屏，然后再处理动作节点，最后才能计算分数
+    const currentTime = timestamp - this.startTime;
+    const prevProgress = this.progress;
+    while (
+      this.progress < this.standardActionsCnt &&
+      currentTime > this.standardActions[this.progress].time
+    ) {
+      this.progress++;
     }
-    console.log(currentTime, this.startTime);
-    // 计算动作得分
-    while (this.progress < this.standardActionsCnt && currentTime > this.standardActions[this.progress].time) {
-      score = this.accumulatedScore / this.accumulatedNodesCnt;
-      // 清屏
+    // 清屏
+    if (this.progress !== prevProgress) {
       this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
       this.passiveCtx.clearRect(
         0,
@@ -686,24 +819,42 @@ class Action {
         this.passiveCanvas.width,
         this.passiveCanvas.height
       );
-      this.progress++;
+    }
+    // 处理动作节点
+    for (let i = 0; i < this.trackers.length; i++) {
+      let subScore = this.trackers[i].passiveDraw(positions[i], timestamp);
+      if (subScore !== 0) {
+        console.log(subScore);
+        this.accumulatedScore += subScore;
+        this.accumulatedNodesCnt++;
+      }
+    }
+    // 计算分数
+    if (this.progress !== prevProgress) {
+      console.log(
+        this.progress,
+        this.accumulatedNodesCnt,
+        this.accumulatedScore
+      );
+
+      if (this.accumulatedNodesCnt > 0) {
+        score = this.accumulatedScore / this.accumulatedNodesCnt;
+        this.accumulatedScore = 0;
+        this.accumulatedNodesCnt = 0;
+      }
     }
     return score;
   };
-  reviewDraw = (nodeIndex, startTime, currentTime) => {
+  reviewDraw = (nodeIndex, startTime, timestamp) => {
     for (const tracker of this.trackers) {
-      tracker.reviewDraw(nodeIndex, startTime, currentTime);
+      tracker.reviewDraw(nodeIndex, startTime, timestamp);
     }
   };
 
   endDrawing = (timestamp) => {
-    let currentTime = 0;
-    if (typeof timestamp === "undefined")
-      currentTime = Date.now() - this.startTime;
-    else currentTime = timestamp - this.startTime;
     this.isDrawing = false;
     for (let i = 0; i < this.trackers.length; i++) {
-      this.trackers[i].endDrawing(currentTime);
+      this.trackers[i].endDrawing(timestamp);
     }
     this.lastActionTime = -9999;
     // 导出动作数据
@@ -713,13 +864,14 @@ class Action {
       tresults.push(tracker.result);
       tscores.push(tracker.score);
     }
+    // 构造结果
     this.result = {
       action: this.action,
       tresults: tresults,
       tscores: tscores,
     };
     this.action = [];
-    console.log(this.result);
+    console.log(this.deflateData(this.result));
   };
 }
 class ActionRecorder {
