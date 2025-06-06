@@ -489,10 +489,6 @@ function detectPoseInRealTime(video, recording) {
     round++;
     if (round == 1) {
       action.startDrawing(pose, Date.now());
-      // 已经完成首次渲染，开始加载标准视频
-      // remoteVideo.src = "/static/std-copy.mp4";
-      // remoteVideo.style.opacity = 1;
-      // remoteVideo.play();
     } else {
       // 产生平滑后的动作位置
       const B = weightedKeypointsPfs;
