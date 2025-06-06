@@ -282,21 +282,26 @@ async function setupCamera(video) {
   });
 }
 
+const testLocal = false;
 async function loadVideo() {
-  const video = document.getElementById("localVideo");
-  // video = await setupCamera();
-  video.src = "/static/std64.mp4"; // 测试集：用本地文件代替用户摄像头
+  let _video = document.getElementById("localVideo");
+  if (testLocal) {
+    _video.src = "/static/std64.mp4"; // 测试集：用本地文件代替用户摄像头
+  } else {
+    _video = await setupCamera(_video);
+  }
+  const video = _video;
   video.style.opacity = 1;
   video.width = videoWidth;
   video.height = videoHeight;
   video.play();
   const remoteVideo = document.getElementById("remoteVideo");
-  remoteVideo.src = "/static/std64.mp4"
+  remoteVideo.src = "/static/std64.mp4";
   remoteVideo.style.opacity = 1;
   remoteVideo.width = videoWidth;
   remoteVideo.height = videoHeight;
   remoteVideo.play();
-  return remoteVideo;
+  return video;
 }
 
 const guiState = {

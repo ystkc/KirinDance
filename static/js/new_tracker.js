@@ -43,6 +43,7 @@ class Track {
     this.nodeProgress = 0; // StandardNodes绘制进度(index)
     this.startTime = 0; // Passive开始时间
     this.detailProgress = 0; // Review模式下detail绘制进度(index)
+    this.prevReviewNode = 0; // Review模式下上一个节点索引
   }
 
   startDrawing = (e, timestamp) => {
@@ -306,34 +307,51 @@ class Track {
     this.lastPos = { x: currentX, y: currentY };
     return score;
   };
-  reviewDraw = (nodeIndex, startTime, currentTimestamp) => {
-    const detailIndexStart = this.standardNodes[nodeIndex].prevDetailIndex;
-    const detailIndexEnd = this.standardNodes[nodeIndex].detailIndex;
-
-    // 如果刚开始，需要绘制起、终点节点
-    if (startTime === currentTimestamp) {
-      this.detailProgress = detailIndexStart;
+  reviewDraw = (prevReviewTime, currentTime) => {
+    if (this.prevReviewNode >= this.standardNodesCnt) return;
+    let currentReviewNT = this.standardNodes[this.prevReviewNode].time;
+    while (this.prevReviewNode < this.standardNodesCnt && currentReviewNT >= prevReviewTime && currentReviewNT <= currentTime) {
+      this.detailProgress = this.standardNodes[this.prevReviewNode].prevDetailIndex;
+      midDetailProgress = (this.detailProgress + this.standardNodes[this.prevReviewNode].prevDetailIndex) >> 1;
+      // 上一个标准节点
       this.drawNode(
         this.standardNodes[nodeIndex].x,
         this.standardNodes[nodeIndex].y,
         this.typeToColor(this.standardNodes[nodeIndex].type)
       );
-      this.drawNode(
-        this.standardNodes[nodeIndex + 1].x,
-        this.standardNodes[nodeIndex + 1].y,
-        this.typeToColor(this.standardNodes[nodeIndex + 1].type)
-      );
-      // 用户轨迹
+      // 上一个用户节点
       this.drawNode(
         this.nodes[nodeIndex].x,
         this.nodes[nodeIndex].y,
         this.typeToColor(99)
       );
+      // 绘制分数
+      const midPoint = this.detailNodes[midDetailProgress];
+      this.passiveCtx.beginPath();
+      this.passiveCtx.moveTo(midPoint.x, midPoint.y);
+      this.passiveCtx.font = "20px Arial";
+      this.passiveCtx.fillStyle = "rgba(0, 0.5)";
+      this.passiveCtx.fillText(
+        this.score[this.prevReviewNode],
+        midPoint.x - 10,
+        midPoint.y - 10
+      );
+      this.passiveCtx.closePath();
+      // 下一个节点
+      this.prevReviewNode++;
+      // 标准节点
+      this.drawNode(
+        this.standardNodes[nodeIndex].x,
+        this.standardNodes[nodeIndex].y,
+        this.typeToColor(this.standardNodes[nodeIndex].type)
+      );
+      // 用户节点
       this.drawNode(
         this.nodes[nodeIndex + 1].x,
         this.nodes[nodeIndex + 1].y,
         this.typeToColor(99)
       );
+      // 标准轨迹
       ctx.beginPath();
       ctx.moveTo(
         this.standardDetailNodes[detailProgress].x,
@@ -341,6 +359,7 @@ class Track {
       );
       ctx.lineWidth = 20;
       ctx.strokeStyle = this.typeToColor(-99);
+      // 用户轨迹
       passiveCtx.beginPath();
       passiveCtx.moveTo(
         this.detailNodes[detailProgress].x,
@@ -348,39 +367,6 @@ class Track {
       );
       passiveCtx.lineWidth = 10;
       passiveCtx.strokeStyle = this.typeToColor(99);
-    }
-    let currentTime = currentTimestamp - startTime;
-    // 如果时间已经超过当前节点的结束时间，则绘制分数并返回
-    if (currentTime >= this.standardDetailNodes[this.detailProgress].time) {
-      const score = this.score[nodeIndex];
-      const midPoint = {
-        x:
-          (this.standardDetailNodes[detailIndexStart].x +
-            this.standardDetailNodes[detailIndexEnd].x) /
-          2,
-        y:
-          (this.standardDetailNodes[detailIndexStart].y +
-            this.standardDetailNodes[detailIndexEnd].y) /
-          2,
-      };
-      ctx.beginPath();
-      ctx.moveTo(midPoint.x, midPoint.y);
-      ctx.font = "20px Arial";
-      ctx.fillStyle = "rgba(0, 0.5)";
-      ctx.fillText(score, midPoint.x - 10, midPoint.y - 10);
-      ctx.closePath();
-      return;
-    }
-    // 画出detailProgress后，currentTime前的detailNodes
-    while (this.detailProgress < detailIndexEnd) {
-      const detailNode = this.detailNodes[this.detailProgress];
-      const stdDetailNode = this.standardDetailNodes[this.detailProgress];
-      if (detailNode.time > currentTime) break;
-      ctx.lineTo(stdDetailNode.x, stdDetailNode.y);
-      ctx.stroke();
-      passiveCtx.lineTo(detailNode.x, detailNode.y);
-      passiveCtx.stroke();
-      this.detailProgress++;
     }
   };
 
@@ -555,6 +541,7 @@ class Action {
       new Track(this.ctx, this.passiveCtx), // 16 rightAnkle
     ];
     this.action = [];
+    this.prevReviewTime = 0;
   }
   deflateData = (data) => {
     // 对于本类的输出数据压缩可以达到20%的压缩率，还可以使用gzip进一步压缩
@@ -845,10 +832,13 @@ class Action {
     }
     return score;
   };
-  reviewDraw = (nodeIndex, startTime, timestamp) => {
-    for (const tracker of this.trackers) {
-      tracker.reviewDraw(nodeIndex, startTime, timestamp);
+  reviewDraw = (currentTime) => {
+    if (this.prevReviewTime) {
+      for (const tracker of this.trackers) {
+        tracker.reviewDraw(this.prevReviewTime, currentTime);
+      }
     }
+    this.prevReviewTime = currentTime;
   };
 
   endDrawing = (timestamp) => {
