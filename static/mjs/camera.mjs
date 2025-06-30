@@ -25,6 +25,7 @@
 // 相机模块
 
 function initCamera() {
+  return;
   if (socket == null || !socket.connected) {
     socket = new WebSocket(`ws://${location.host}/ws`);
     send_ws_msg("start");
@@ -125,6 +126,7 @@ function connect_ws() {
   };
 }
 function send_ws_msg(msg) {
+  return;
   if (socket && socket.readyState == 1) {
     socket.send(msg);
   } else {
@@ -143,48 +145,48 @@ window.onload = function () {
     paused = false;
     enabled_1 = true;
 
-    source = new EventSource("/message");
-    source.onmessage = function (event) {
-      const data = event.data.split("#");
-      const messageObject = {};
+    // source = new EventSource("/message");
+    // source.onmessage = function (event) {
+    //   const data = event.data.split("#");
+    //   const messageObject = {};
 
-      data.forEach((line) => {
-        const [key, value] = line.split("$");
-        if (key && value) {
-          messageObject[key] = value;
-        }
-      });
-      // handler
-      if (messageObject.name === "pose") {
-        const pose = JSON.parse(messageObject.pose);
-        console.log(pose); // 我也不知道结构
-        const keypoints = pose.keypoints.map((keypoint) => ({
-          position: {
-            x: keypoint.position.x,
-            y: keypoint.position.y,
-          },
-          score: keypoint.score,
-          part: keypoint.part,
-        }));
-        let ctx = remoteVideo.getContext("2d");
-        if (guiState.output.showPoints) {
-          drawKeypoints(keypoints, minPartConfidence, ctx);
-        }
-        if (guiState.output.showSkeleton) {
-          drawSkeleton(keypoints, minPartConfidence, ctx);
-        }
-        if (guiState.output.showBoundingBox) {
-          drawBoundingBox(keypoints, ctx);
-        }
-      } else if (messageObject.name === "progress") {
-        // 进度条
-        console.log(messageObject.progress);
-        document.getElementById("progress").value = messageObject.progress;
-      }
-    };
+    //   data.forEach((line) => {
+    //     const [key, value] = line.split("$");
+    //     if (key && value) {
+    //       messageObject[key] = value;
+    //     }
+    //   });
+    //   // handler
+    //   if (messageObject.name === "pose") {
+    //     const pose = JSON.parse(messageObject.pose);
+    //     console.log(pose); // 我也不知道结构
+    //     const keypoints = pose.keypoints.map((keypoint) => ({
+    //       position: {
+    //         x: keypoint.position.x,
+    //         y: keypoint.position.y,
+    //       },
+    //       score: keypoint.score,
+    //       part: keypoint.part,
+    //     }));
+    //     let ctx = remoteVideo.getContext("2d");
+    //     if (guiState.output.showPoints) {
+    //       drawKeypoints(keypoints, minPartConfidence, ctx);
+    //     }
+    //     if (guiState.output.showSkeleton) {
+    //       drawSkeleton(keypoints, minPartConfidence, ctx);
+    //     }
+    //     if (guiState.output.showBoundingBox) {
+    //       drawBoundingBox(keypoints, ctx);
+    //     }
+    //   } else if (messageObject.name === "progress") {
+    //     // 进度条
+    //     console.log(messageObject.progress);
+    //     document.getElementById("progress").value = messageObject.progress;
+    //   }
+    // };
     // initCamera();// 旧版，在后端处理视频帧
-    socket = new WebSocket(`ws://${location.host}/ws`);
-    send_ws_msg("start");
+    // socket = new WebSocket(`ws://${location.host}/ws`);
+    // send_ws_msg("start");
 
     setupFPS();
 
