@@ -72,7 +72,6 @@
   height: 405px;
 }
 .canvas-container video {
-  opacity: 0.1 !important; /* 测试，方便观察 */
   width: 540px;
   height: 405px;
   -moz-transform: scaleX(-1);

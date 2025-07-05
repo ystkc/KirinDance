@@ -1,4 +1,5 @@
 // canvas层叠顺序从上到下：passiveCanvas, canvas, skeletonCanvas(可与img或video共用)
+const debug = false;
 class Track {
   static minNodesSpacingI = 50;
   static minNodesSpacingII = 50;
@@ -231,7 +232,7 @@ class Track {
     )
       ? this.standardNodes[this.nodeProgress].major
       : false;
-    if (true) {
+    if (debug && isMajor) {
       // 绘制基础轨迹
       this.passiveCtx.moveTo(this.lastPos.x, this.lastPos.y);
       this.passiveCtx.lineTo(currentX, currentY);
@@ -246,8 +247,8 @@ class Track {
     }
 
     let cstdn = this.standardNodes[this.nodeProgress];
-    if (cstdn.type === -1)
-      this.drawNode(cstdn.x, cstdn.y, this.typeToColor(cstdn.type)); // 绘制节点
+    // if (cstdn.type === -1)
+    //   this.drawNode(cstdn.x, cstdn.y, this.typeToColor(cstdn.type)); // 绘制节点
     while (currentTime > cstdn.time) {
       // 计算上一段的残差平方和作为分数储存（消除起点偏移）
       this.nodes.push({
@@ -276,7 +277,7 @@ class Track {
         }
         score = parseInt(
           Math.max(
-            100 - score / 1000 / (cstdn.detailIndex - cstdn.prevDetailIndex),
+            100 - score / 128 / (cstdn.detailIndex - cstdn.prevDetailIndex),
             0
           )
         );
@@ -284,12 +285,14 @@ class Track {
       } else score = 0; // 起点节点不计算分数
       this.score[this.nodeProgress] = score;
       this.onNode = true;
-      this.drawNode(currentX, currentY, this.typeToColor(99)); // 绘制用户轨迹节点
+      if (debug) {
+        this.drawNode(currentX, currentY, this.typeToColor(99)); // 绘制用户轨迹节点
+      }
       // 绘制分数
       const midPoint =
         this.detailNodes[(cstdn.detailIndex + cstdn.prevDetailIndex) >> 1]; // 上一段的中点
 
-      if (this.nodeProgress > 1) {
+      if (debug && this.nodeProgress > 1) {
         // 跳过第一段起点节点的分数绘制
         // 将分数打印在passiveCtx的上一段轨迹的中间
         this.passiveCtx.beginPath();
@@ -302,7 +305,9 @@ class Track {
       this.nodeProgress++;
       if (this.nodeProgress >= this.standardNodesCnt) return score;
       cstdn = this.standardNodes[this.nodeProgress]; // 画出下一段的标准节点
-      this.drawNode(cstdn.x, cstdn.y, this.typeToColor(cstdn.type));
+      if (debug) {
+        this.drawNode(cstdn.x, cstdn.y, this.typeToColor(cstdn.type));
+      }
     }
     this.lastPos = { x: currentX, y: currentY };
     return score;
@@ -505,9 +510,9 @@ class Action {
   actionTypeToColor = (type) => {
     switch (type) {
       case 0: // 人体连线
-        return "rgba(0, 0, 0, 0.1)";
+        return "rgba(0, 0, 0, 0.5)";
       case 1: // 关节
-        return "rgba(238, 130, 238, 0.5)"; // 紫色 ee82ee99
+        return "rgba(238, 130, 238, 0.6)"; // 紫色 ee82ee99
     }
   };
   constructor(canvas, passiveCanvas, skeletonCanvas) {
@@ -676,7 +681,7 @@ class Action {
       );
       this.skeletonCtx.lineTo(positions[end].offsetX, positions[end].offsetY);
       this.skeletonCtx.strokeStyle = this.actionTypeToColor(0);
-      this.skeletonCtx.lineWidth = 8;
+      this.skeletonCtx.lineWidth = 16;
       this.skeletonCtx.stroke();
       this.skeletonCtx.closePath();
     }
@@ -689,7 +694,7 @@ class Action {
       this.skeletonCtx.arc(
         positions[i].offsetX,
         positions[i].offsetY,
-        8,
+        16,
         0,
         Math.PI * 2
       );

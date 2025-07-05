@@ -411,12 +411,12 @@ function detectPoseInRealTime(video, recording) {
     if (flipPoseHorizontal) { // 手动水平翻转(MoveNet没有内置这个功能)
       poses.forEach((pose) => {
         pose.keypoints.forEach((keypoint) => {
-          keypoint.x = videoWidth - keypoint.x * 0.75; // 至于为何要乘0.75(画框和原视频比例)，暂时不清楚
-          keypoint.y = keypoint.y * 0.75;
+          keypoint.x = videoWidth - keypoint.x; // 至于为何要乘0.75(画框和原视频比例)，暂时不清楚
+          keypoint.y = keypoint.y;
         });
       });
     }
-    if (poses[0].score >= singleMinPoseConfidence)
+    if (poses.length > 0 && poses[0].score >= singleMinPoseConfidence)
       poseProcessingFrame(
         singlePoseDetectionFrame,
         poses[0],
