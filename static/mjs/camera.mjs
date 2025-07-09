@@ -363,6 +363,7 @@ function detectPoseInRealTime(video, recording) {
   }
   waiting = 0;
   hideAllModals();
+  const remoteVideo = document.getElementById("remoteVideo");
   const canvas = document.getElementById("canvas");
   const passiveCanvas = document.getElementById("passiveCanvas");
   const skeletonCanvas = document.getElementById("skeletonCanvas");
@@ -520,7 +521,8 @@ function detectPoseInRealTime(video, recording) {
       }
 
       // 如果视频结束，则停止录制
-      if (video.ended) {
+
+      if (remoteVideo.ended) {
         action.endDrawing(Date.now());
         return;
       }

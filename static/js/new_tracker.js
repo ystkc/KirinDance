@@ -277,7 +277,7 @@ class Track {
         }
         score = parseInt(
           Math.max(
-            100 - score / 128 / (cstdn.detailIndex - cstdn.prevDetailIndex),
+            95 - score / 128 / (cstdn.detailIndex - cstdn.prevDetailIndex),
             0
           )
         );
@@ -517,6 +517,7 @@ class Action {
   };
   constructor(canvas, passiveCanvas, skeletonCanvas) {
     this.accumulatedScore = 0;
+    this.accumulatedTotalScore = 0;
     this.accumulatedNodesCnt = 0;
     this.progress = 0;
     this.canvas = canvas;
@@ -787,7 +788,6 @@ class Action {
   };
   passiveDraw = (pose, timestamp) => {
     let score = 0;
-
     const positions = pose.keypoints.map((keypoint) => ({
       offsetX: keypoint.position.x,
       offsetY: keypoint.position.y,
@@ -816,7 +816,6 @@ class Action {
     for (let i = 0; i < this.trackers.length; i++) {
       let subScore = this.trackers[i].passiveDraw(positions[i], timestamp);
       if (subScore !== 0) {
-        console.log(subScore);
         this.accumulatedScore += subScore;
         this.accumulatedNodesCnt++;
       }
@@ -835,6 +834,7 @@ class Action {
         this.accumulatedNodesCnt = 0;
       }
     }
+    this.accumulatedTotalScore += score;
     return score;
   };
   reviewDraw = (currentTime) => {
@@ -867,6 +867,13 @@ class Action {
     };
     this.action = [];
     console.log(this.deflateData(this.result));
+    // 显示最终平均分（this.accumulatedTotalScore/this.standardActionsCnt）
+    let finalScore = this.accumulatedTotalScore / this.standardActionsCnt;
+    let remark = "";
+    if (finalScore > 90) remark = "<br>太强辣！";
+    else if (finalScore > 80) remark = "<br>相当不错！";
+    else remark = "<br>再接再厉！";
+    showModal("您的分数是：" + finalScore.toFixed(2) + remark + "<br>刷新页面开始新一轮评分。", "评分结束");
   };
 }
 class ActionRecorder {

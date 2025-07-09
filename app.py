@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from fastapi import FastAPI, Request, Response
 from fastapi.responses import StreamingResponse
 from fastapi.templating import Jinja2Templates
@@ -15,7 +16,13 @@ import os
 # import asyncio
 # import json
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 启动localhost:8860
+    os.system("start http://localhost:8860")
+    yield
+
+app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
 templates = Jinja2Templates(directory="templates")
