@@ -1,0 +1,62 @@
+# Welcome to Jekyll!
+#
+# This config file is meant for settings that affect your whole blog, values
+# which you are expected to set up once and rarely edit after that. If you find
+# yourself editing this file very often, consider using Jekyll's data files
+# feature for the data you need to update frequently.
+#
+# For technical reasons, this file is *NOT* reloaded automatically when you use
+# 'bundle exec jekyll serve'. If you change this file, please restart the server process.
+#
+# If you need help with YAML syntax, here are some quick references for you:
+# https://learn-the-web.algonquindesign.ca/topics/markdown-yaml-cheat-sheet/#yaml
+# https://learnxinyminutes.com/docs/yaml/
+#
+# Site settings
+# These are used to personalize your new site. If you look in the HTML files,
+# you will see them accessed via {{ site.title }}, {{ site.email }}, and so on.
+# You can create any custom variable you would like, and they will be accessible
+# in the templates via {{ site.myvariable }}.
+
+title: 迳口麒麟舞AI教练
+author: 中山大学集成电路学院 迳口麒麟舞AI教练开发团队
+email: linz7@mail2.sysu.edu.cn
+keywords: ["迳口麒麟舞", "AI", "动作识别", "动作评分", "百千万工程"]
+description: >- # this means to ignore newlines until "baseurl:"
+  通过AI动作识别，加上独特的自研评分算法，助力文化传承，为迳口麒麟舞爱好者提供更加轻松学习迳口麒麟舞的体验。
+baseurl: "/KirinDance" # the subpath of your site, e.g. /blog
+url: "https://ystkc.github.io" # the base hostname & protocol for your site, e.g. http://example.com
+github_username:  ystkc
+
+# Build settings
+theme: minima
+plugins:
+  - jekyll-feed
+
+# Exclude from processing.
+# The following items will not be processed, by default.
+# Any item listed under the `exclude:` key here will be automatically added to
+# the internal "default list".
+#
+# Excluded items can be processed by explicitly listing the directories or
+# their entries' file path in the `include:` list.
+#
+exclude:
+  - .sass-cache/
+  - .jekyll-cache/
+  - gemfiles/
+  - Gemfile
+  - Gemfile.lock
+  - node_modules/
+  - vendor/bundle/
+  - vendor/cache/
+  - vendor/gems/
+  - vendor/ruby/
+  - static/bin_unzipped/
+  - archiev/
+  - cache/
+  - milestone/
+  - tools/
+  - "*.txt"
+  - "*.py"
+  - "*.bat"

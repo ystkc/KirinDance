@@ -288,7 +288,7 @@ const testLocal = false;
 async function loadVideo() {
   let _video = document.getElementById("localVideo");
   if (testLocal) {
-    _video.src = "/static/std64.mp4"; // 测试集：用本地文件代替用户摄像头
+    _video.src = "static/std64_fixed.mp4"; // 测试集：用本地文件代替用户摄像头
   } else {
     _video = await setupCamera(_video);
   }
@@ -298,7 +298,7 @@ async function loadVideo() {
   video.height = videoHeight;
   video.play();
   const remoteVideo = document.getElementById("remoteVideo");
-  remoteVideo.src = "/static/std64.mp4";
+  remoteVideo.src = "static/std64_fixed.mp4";
   remoteVideo.style.opacity = 1;
   remoteVideo.width = videoWidth;
   remoteVideo.height = videoHeight;

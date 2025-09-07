@@ -1,0 +1,1 @@
+ffmpeg -i std.mp4        -c:v libx264 -profile:v baseline -level 3.0        -movflags +faststart        -max_muxing_queue_size 1024        std_fixed.mp4

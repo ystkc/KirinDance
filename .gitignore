@@ -12,3 +12,10 @@
 /archiev
 *.pyc
 *.map
+
+# Jekyll
+_site
+.sass-cache
+.jekyll-cache
+.jekyll-metadata
+vendor
