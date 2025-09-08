@@ -21,12 +21,17 @@
       <div style="display: flex; flex-direction: row">
         <div class="canvas-container">
           <video id="localVideo" class="video" playsinline></video>
-          <canvas id="skeletonCanvas"></canvas>
-          <canvas id="passiveCanvas"></canvas>
+          <canvas id="localSkeletonCanvas"></canvas>
+          <canvas id="localPassiveCanvas"></canvas>
+          <canvas id="localNodeCanvas"></canvas>
+          <canvas id="localCanvas"></canvas>
         </div>
         <div class="canvas-container">
           <video id="remoteVideo" class="video" playsinline></video>
-          <canvas id="canvas"></canvas>
+          <canvas id="remoteSkeletonCanvas"></canvas>
+          <canvas id="remotePassiveCanvas"></canvas>
+          <canvas id="remoteNodeCanvas"></canvas>
+          <canvas id="remoteCanvas"></canvas>
         </div>
       </div>
       <div id="score" class="score">得分：</div>
@@ -123,15 +128,16 @@
     <!-- MoveNet -->
     <script src="static/js/pose-detection.min.js"></script>
     <script src="static/js/Stats.min.js"></script>
-    <script src="static/js/demo_util.js"></script>
     <script src="static/js/new_tracker.js"></script>
     <script src="static/js/testdata.js"></script>
     <script type="module" src="static/mjs/camera.mjs"></script>
 
     <script>
-        setTimeout(() => {
-          debugger;
-        }, 100000);
+      // if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
+      //   setTimeout(() => {
+      //     debugger;
+      //   }, 60000);
+      // }
     </script>
   </body>
 </html>

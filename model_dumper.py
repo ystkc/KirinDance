@@ -99,6 +99,6 @@ def set_proxy(enable=True, proxy_server="http://127.0.0.1:8080"):
 if __name__ == "__main__":
     try:
         set_proxy(True, "http://127.0.0.1:8080")
-        os.system('mitmdump -s model_dumper.py --set tls_version_client_min=UNBOUNDED ')
+        os.system('mitmdump -q -s model_dumper.py --set tls_version_client_min=UNBOUNDED ')
     finally:
         set_proxy(False)
