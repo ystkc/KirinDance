@@ -36,13 +36,13 @@
       </div>
       <div id="score" class="score">得分：</div>
       <div class="round">
-        <progress id="progress" value="1" max="100"></progress>
+        <progress id="progress" value="1" max="1"></progress>
       </div>
       <div class="footer">
         <div class="btn" id="start"><div>★Start</div></div>
-        <div class="btn" id="pause" style="display: none;"><div>Pause</div></div>
+        <div class="btn" id="pause"><div>Pause</div></div>
         <div class="btn" id="stop"><div>Stop</div></div>
-        <div class="btn" id="record" style="display: none;"><div>Record</div></div>
+        <div class="btn" id="cache" style="display: none;"><div>Cache</div></div>
       </div>
     </div>
     <div class="fpsbox" style="width: 100px"></div>
@@ -128,8 +128,7 @@
     <!-- MoveNet -->
     <script src="static/js/pose-detection.min.js"></script>
     <script src="static/js/Stats.min.js"></script>
-    <script src="static/js/new_tracker.js"></script>
-    <script src="static/js/testdata.js"></script>
+    <script src="static/js/remoteCache.js"></script>
     <script type="module" src="static/mjs/camera.mjs"></script>
 
     <script>
