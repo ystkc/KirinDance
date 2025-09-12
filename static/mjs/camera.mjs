@@ -218,7 +218,17 @@ async function startPlaying() {
       remoteCache // 在HTML中通过script标签加载的静态缓存数据。目前只有一个视频，就不做另外的逻辑了
     ); // 主模块，用于姿态识别并评分
   } else {
-    loadRemoteVideo(userCameraCanvas); // 配置用户的摄像头（加载标准视频，用于教学和比对）
+    // 配置用户的摄像头（加载标准视频，用于教学和比对）
+    const index = parseInt(prompt("请输入标准视频序号："));
+    if (index === 1) {
+      loadRemoteVideo(userCameraCanvas); // 标准视频
+    } else if (index === 2) {
+      loadRemoteVideo(userCameraCanvas, "static/std_fixed.mp4"); // 6s标准视频
+    } else if (index === 3) {
+      loadRemoteVideo(userCameraCanvas, "static/lazy_fixed.mp4"); // 懒人示范视频
+    } else if (index === 4) {
+      loadRemoteVideo(userCameraCanvas, "static/crazy_fixed.mp4"); // 努力模仿视频
+    }
     userCameraCanvas.parentNode.classList.remove("flip"); // 标准对照模式使用视频而不是前置摄像头，需要取消反转
     flipPoseHorizontal = false; // 标准对照模式不需要手动翻转
     detectPoseInRealTime(
@@ -319,8 +329,9 @@ async function loadCameraCanvas(userCameraCanvas) {
 }
 
 // 将画布连接到标准视频
-async function loadRemoteVideo(remoteVideo) {
-  remoteVideo.src = example_video;
+async function loadRemoteVideo(remoteVideo, customSrc) {
+  if (!customSrc) customSrc = example_video;
+  remoteVideo.src = customSrc;
   remoteVideo.load();
   remoteVideo.style.opacity = 1;
   remoteVideo.width = videoWidth;
@@ -381,19 +392,19 @@ function drawSkeletons(pose, skeletonCtx, poseConf, partConf) {
 }
 
 function standardize(poses) {
-    // 将PosNet的输出结果统一为MoveNet的输出格式：
-    const after = poses.map((pose) => {
-      return {
-        keypoints: pose.keypoints.map((keypoint) => {
-          return {
-            x: keypoint.position.x,
-            y: keypoint.position.y,
-            score: keypoint.score,
-          };
-        }),
-        score: pose.score,
-      };
-    });
+  // 将PosNet的输出结果统一为MoveNet的输出格式：
+  const after = poses.map((pose) => {
+    return {
+      keypoints: pose.keypoints.map((keypoint) => {
+        return {
+          x: keypoint.position.x,
+          y: keypoint.position.y,
+          score: keypoint.score,
+        };
+      }),
+      score: pose.score,
+    };
+  });
   return after;
 }
 
@@ -401,9 +412,11 @@ async function singlePoseEstimate(video) {
   // 单人姿态识别
   // PosNet:
   if (usePoseNet) {
-    return standardize(await guiState.net.estimatePoses(video, {
-      decodingMethod: "single-person",
-    }));
+    return standardize(
+      await guiState.net.estimatePoses(video, {
+        decodingMethod: "single-person",
+      })
+    );
   } else {
     // MoveNet:
     return await guiState.net.estimatePoses(video);
@@ -414,12 +427,14 @@ async function multiPoseEstimate(video) {
   // 多人姿态识别
   // PosNet:
   if (usePoseNet) {
-    return standardize(await guiState.net.estimatePoses(video, {
-      decodingMethod: "multi-person",
-      maxDetections: guiState.multiPoseDetection.maxPoseDetections,
-      scoreThreshold: guiState.multiPoseDetection.minPartConfidence,
-      nmsRadius: guiState.multiPoseDetection.nmsRadius,
-    }));
+    return standardize(
+      await guiState.net.estimatePoses(video, {
+        decodingMethod: "multi-person",
+        maxDetections: guiState.multiPoseDetection.maxPoseDetections,
+        scoreThreshold: guiState.multiPoseDetection.minPartConfidence,
+        nmsRadius: guiState.multiPoseDetection.nmsRadius,
+      })
+    );
   } else {
     // MoveNet:（注意，MoveNet不能检测多人，只会返回一个长度的数组）
     return await guiState.net.estimatePoses(video, {
@@ -711,7 +726,9 @@ function calcCacheInRealTime(remoteVideo) {
     }, 1000); // 1s后再次尝试
     return;
   }
-  displayCache = confirm("缓存过程是否渲染到屏幕上？（如果设备性能不好，请不要渲染）");
+  displayCache = confirm(
+    "缓存过程是否渲染到屏幕上？（如果设备性能不好，请不要渲染）"
+  );
   waiting = 0;
   hideAllModals(); // 关闭所有提示框
 
@@ -844,7 +861,8 @@ class PoseWeighting {
         : undefined; // 前一帧的动作位置的前缀和
     const weightedKeypointsPfs = [];
     for (let i = 0; i < this.keypointsLength; i++) {
-      const  keypoint = keypoints[i], score = keypoint.score;
+      const keypoint = keypoints[i],
+        score = keypoint.score;
       this.latestPartScore[i] = score; // 记录每个关节的最新分数
       try {
         weightedKeypointsPfs.push({
@@ -897,12 +915,9 @@ class PoseWeighting {
   }
 }
 
-const ALPHA = 4;
-const BETA = 1;
-const GAMMA = 1;
+const ALPHA = 32768;
+const GAMMA = 3;
 
-// 4 1 1
-// 3000 1 2
 const DEFAULT_PENALTY = ALPHA * 50;
 
 class PoseScoring {
@@ -948,7 +963,8 @@ class PoseScoring {
     let error = 0;
     for (let i = 0; i < localKeypoints.length; i++) {
       error +=
-        (Math.abs(errorX[i] - minErrorX)*BETA) ** GAMMA + (Math.abs(errorY[i] - minErrorY)*BETA) ** GAMMA; // 计算曼哈顿距离之和
+        Math.abs(errorX[i] - minErrorX) ** GAMMA +
+        Math.abs(errorY[i] - minErrorY) ** GAMMA; // 计算曼哈顿距离之和
     }
     const score = Math.max(100 - error / ALPHA / localKeypoints.length, 1); // 归一化到1-100
     if (videoPaused) return score; // 暂停时评分但是不计入总分
