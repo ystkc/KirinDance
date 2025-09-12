@@ -338,7 +338,6 @@ function drawSkeletons(pose, skeletonCtx, poseConf, partConf) {
   // pose结构: {keypoints: [{position: {x: number, y: number}, score: number},...], score: number}
   // 绘制人体骨骼
   if (pose.score < poseConf) return; // 姿态置信度不够，不画
-  console.log("draw", pose);
   const keypoints = pose.keypoints;
   if (guiState.output.showSkeletons) {
     skeletonCtx.beginPath();
@@ -383,7 +382,6 @@ function drawSkeletons(pose, skeletonCtx, poseConf, partConf) {
 
 function standardize(poses) {
     // 将PosNet的输出结果统一为MoveNet的输出格式：
-    console.log("before", poses);
     const after = poses.map((pose) => {
       return {
         keypoints: pose.keypoints.map((keypoint) => {
@@ -396,7 +394,6 @@ function standardize(poses) {
         score: pose.score,
       };
     });
-  console.log("after", after);  
   return after;
 }
 
@@ -697,7 +694,7 @@ function detectPoseInRealTime(
   }
 }
 
-const displayCache = true;
+let displayCache = false;
 function calcCacheInRealTime(remoteVideo) {
   // 计算远程视频的姿态缓存（本函数使用了requestVideoFrameCallback，目前不能在火狐浏览器中运行）
   if (!("requestVideoFrameCallback" in HTMLVideoElement.prototype)) {
@@ -714,6 +711,7 @@ function calcCacheInRealTime(remoteVideo) {
     }, 1000); // 1s后再次尝试
     return;
   }
+  displayCache = confirm("缓存过程是否渲染到屏幕上？（如果设备性能不好，请不要渲染）");
   waiting = 0;
   hideAllModals(); // 关闭所有提示框
 
@@ -899,9 +897,17 @@ class PoseWeighting {
   }
 }
 
+const ALPHA = 4;
+const BETA = 1;
+const GAMMA = 1;
+
+// 4 1 1
+// 3000 1 2
+const DEFAULT_PENALTY = ALPHA * 50;
+
 class PoseScoring {
   // 动作评分模块，用于评估两个动作的相近程度，也就是用户动作和标准动作相比然后评分
-  constructor(errorPenalty = 1600) {
+  constructor(errorPenalty = DEFAULT_PENALTY) {
     this.scoreHistory = []; // 历史动作分数
     this.scoreTime = []; // 历史动作时间
     this.scoreCnt = 0; // 历史动作计数
@@ -942,9 +948,9 @@ class PoseScoring {
     let error = 0;
     for (let i = 0; i < localKeypoints.length; i++) {
       error +=
-        Math.abs(errorX[i] - minErrorX) + Math.abs(errorY[i] - minErrorY); // 计算曼哈顿距离之和
+        (Math.abs(errorX[i] - minErrorX)*BETA) ** GAMMA + (Math.abs(errorY[i] - minErrorY)*BETA) ** GAMMA; // 计算曼哈顿距离之和
     }
-    const score = Math.max(100 - error / 16 / localKeypoints.length, 1); // 归一化到1-100
+    const score = Math.max(100 - error / ALPHA / localKeypoints.length, 1); // 归一化到1-100
     if (videoPaused) return score; // 暂停时评分但是不计入总分
     // 处理分数前缀和
     if (this.scoreCnt == 0) {
