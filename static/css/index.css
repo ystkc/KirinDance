@@ -74,6 +74,8 @@
 .canvas-container video {
   width: 540px;
   height: 405px;
+}
+.canvas-container.flip video {
   -moz-transform: scaleX(-1);
   -o-transform: scaleX(-1);
   -webkit-transform: scaleX(-1);

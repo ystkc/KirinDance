@@ -1,1 +1,2 @@
-ffmpeg -i std.mp4        -c:v libx264 -profile:v baseline -level 3.0        -movflags +faststart        -max_muxing_queue_size 1024        std_fixed.mp4
+:: 保留0:25到1:25，并裁剪到720*540
+ffmpeg -i puppet.mp4 -ss 00:00:25 -to 00:01:25 -vf "crop=720:540" -c:v libx264 -profile:v baseline -level 3.0 -movflags +faststart -max_muxing_queue_size 1024 puppet_fixed.mp4

@@ -27,13 +27,13 @@
 
 const guiState = {
   // 姿态识别参数设置和对象保存
-  algorithm: "single-pose", // 姿态识别算法，single-pose或multi-pose
+  algorithm: "multi-pose", // 姿态识别算法，single-pose或multi-pose
   input: {
-    // PosNet/ResNet
-    architecture: "ResNet50", // 姿态识别模型架构
-    outputStride: 32, // 姿态识别模型输出步长，2的幂，越大越精细，但会增加计算量
+    // PosNet的ResNet50/MobileNetV1
+    architecture: "MobileNetV1", // 姿态识别模型架构
+    outputStride: 8, // 姿态识别模型输出步长，2的幂，越大越精细，但会增加计算量
     inputResolution: 200, // 姿态识别模型精度，200-900，越大越精细，但会增加计算量
-    multiplier: 1,
+    multiplier: 0.75,
     quantBytes: 2,
   },
   moveNetInput: {
@@ -64,6 +64,8 @@ const guiState = {
   net: null, // 姿态识别模型对象，null表示尚未加载完毕
 }; // PosNet和MoveNet都在库中硬编码了从google云下载的模型，大约几十MB，国内需要魔法
 // 我修改了pose-detection.min.js，将其中的所有https://tfhub.dev/删去，这样所有的资源都会从本域名加载(就是从本项目的google文件夹)
+let flipPoseHorizontal = true; // 手动水平翻转(因为是前置摄像头，所以要手动翻转)
+// usePoseNet变量，在index.html中定义，使用poseNet还是MoveNet，默认使用MoveNet
 
 function toggleLoadingUI( // 显示或关闭加载中的文本元素
   showLoadingUI,
@@ -83,20 +85,23 @@ export async function bindPage() {
   // 加载posnet模型
   toggleLoadingUI(true); // 显示模型加载中的提示
   // 以下所有标记PosNet:和MoveNet:的注释都是可以互相替换的，分别代表两种不同的姿态识别方案
-  // PosNet:
-  // const net = await posenet.load({
-  //   architecture: guiState.input.architecture,
-  //   outputStride: guiState.input.outputStride,
-  //   inputResolution: guiState.input.inputResolution,
-  //   multiplier: guiState.input.multiplier,
-  //   quantBytes: guiState.input.quantBytes,
-  // });
-  // MoveNet:
-  const model = poseDetection.SupportedModels.MoveNet;
-  const detectorConfig = {
-    modelType: guiState.moveNetInput.modelType,
-  };
-  const net = await poseDetection.createDetector(model, detectorConfig); // 异步下载
+  let net;
+  if (usePoseNet) {
+    net = await posenet.load({
+      architecture: guiState.input.architecture,
+      outputStride: guiState.input.outputStride,
+      inputResolution: guiState.input.inputResolution,
+      multiplier: guiState.input.multiplier,
+      quantBytes: guiState.input.quantBytes,
+    });
+  } else {
+    // MoveNet:
+    const model = poseDetection.SupportedModels.MoveNet;
+    const detectorConfig = {
+      modelType: guiState.moveNetInput.modelType,
+    };
+    net = await poseDetection.createDetector(model, detectorConfig); // 异步下载
+  }
   toggleLoadingUI(false); // 关闭模型加载中的提示
   guiState.net = net; // 保存模型对象
 }
@@ -113,7 +118,7 @@ let cameraStream = null; // 用户摄像头流，点击开始时初始化，结�
 let round = -1; // 标记当前rAF轮数，刚开始的一轮需要特殊处理（-1未开始或已结束，0准备中）
 let waiting = 0; // 标记等待模型加载完毕的提示框是否已经显示
 
-const example_video = "static/std64_fixed.mp4"; // 标准视频，建议简单背景，单人全身，使用适合web加载的视频格式，widthxheight的分辨率
+// 标准视频在index.html中定义，建议简单背景，单人全身，使用适合web加载的视频格式，widthxheight的分辨率
 
 const videoWidth = width;
 const videoHeight = height;
@@ -213,8 +218,11 @@ async function startPlaying() {
       remoteCache // 在HTML中通过script标签加载的静态缓存数据。目前只有一个视频，就不做另外的逻辑了
     ); // 主模块，用于姿态识别并评分
   } else {
+    loadRemoteVideo(userCameraCanvas); // 配置用户的摄像头（加载标准视频，用于教学和比对）
+    userCameraCanvas.parentNode.classList.remove("flip"); // 标准对照模式使用视频而不是前置摄像头，需要取消反转
+    flipPoseHorizontal = false; // 标准对照模式不需要手动翻转
     detectPoseInRealTime(
-      remoteVideo,
+      userCameraCanvas,
       remoteVideo,
       leftSkeletonCanvas,
       rightSkeletonCanvas,
@@ -330,6 +338,7 @@ function drawSkeletons(pose, skeletonCtx, poseConf, partConf) {
   // pose结构: {keypoints: [{position: {x: number, y: number}, score: number},...], score: number}
   // 绘制人体骨骼
   if (pose.score < poseConf) return; // 姿态置信度不够，不画
+  console.log("draw", pose);
   const keypoints = pose.keypoints;
   if (guiState.output.showSkeletons) {
     skeletonCtx.beginPath();
@@ -372,35 +381,56 @@ function drawSkeletons(pose, skeletonCtx, poseConf, partConf) {
   }
 }
 
+function standardize(poses) {
+    // 将PosNet的输出结果统一为MoveNet的输出格式：
+    console.log("before", poses);
+    const after = poses.map((pose) => {
+      return {
+        keypoints: pose.keypoints.map((keypoint) => {
+          return {
+            x: keypoint.position.x,
+            y: keypoint.position.y,
+            score: keypoint.score,
+          };
+        }),
+        score: pose.score,
+      };
+    });
+  console.log("after", after);  
+  return after;
+}
+
 async function singlePoseEstimate(video) {
   // 单人姿态识别
   // PosNet:
-  // const poses = await guiState.net.estimatePoses(video, {
-  //   flipHorizontal: flipPoseHorizontal,
-  //   decodingMethod: "single-person",
-  // });
-  // MoveNet:
-  return await guiState.net.estimatePoses(video);
+  if (usePoseNet) {
+    return standardize(await guiState.net.estimatePoses(video, {
+      decodingMethod: "single-person",
+    }));
+  } else {
+    // MoveNet:
+    return await guiState.net.estimatePoses(video);
+  }
 }
 
 async function multiPoseEstimate(video) {
   // 多人姿态识别
   // PosNet:
-  // const poses = await guiState.net.estimatePoses(video, {
-  //   flipHorizontal: flipPoseHorizontal,
-  //   decodingMethod: "multi-person",
-  //   maxDetections: guiState.multiPoseDetection.maxPoseDetections,
-  //   scoreThreshold: multiMinPartConfidence,
-  //   nmsRadius: guiState.multiPoseDetection.nmsRadius,
-  // });
-  // MoveNet:
-  const poses = await guiState.net.estimatePoses(video, {
-    flipHorizontal: flipPoseHorizontal,
-    maxDetections: guiState.multiPoseDetection.maxPoseDetections,
-    scoreThreshold: guiState.multiPoseDetection.minPartConfidence,
-    nmsRadius: guiState.multiPoseDetection.nmsRadius,
-  });
-  return poses;
+  if (usePoseNet) {
+    return standardize(await guiState.net.estimatePoses(video, {
+      decodingMethod: "multi-person",
+      maxDetections: guiState.multiPoseDetection.maxPoseDetections,
+      scoreThreshold: guiState.multiPoseDetection.minPartConfidence,
+      nmsRadius: guiState.multiPoseDetection.nmsRadius,
+    }));
+  } else {
+    // MoveNet:（注意，MoveNet不能检测多人，只会返回一个长度的数组）
+    return await guiState.net.estimatePoses(video, {
+      maxDetections: guiState.multiPoseDetection.maxPoseDetections,
+      scoreThreshold: guiState.multiPoseDetection.minPartConfidence,
+      nmsRadius: guiState.multiPoseDetection.nmsRadius,
+    });
+  }
 }
 
 function chkNotReady(video) {
@@ -464,8 +494,6 @@ function detectPoseInRealTime(
     if (remoteVideo.ended || halt || round == -1) endDetect(); // 视频播放结束，结束姿态检测（防止这玩意漏掉了，补丁）
   }, 1000); // 1s更新一次
 
-  const flipPoseHorizontal = true; // 手动水平翻转(MoveNet没有内置这个功能)
-
   localSkeletonCanvas.width = videoWidth;
   localSkeletonCanvas.height = videoHeight;
   remoteSkeletonCanvas.width = videoWidth;
@@ -481,10 +509,6 @@ function detectPoseInRealTime(
   round = 0; // 标记当前帧数，刚开始的几帧需要特殊处理
 
   const posesQueueLength = 5; // 队列最大长度
-
-  const singleMinPoseConfidence =
-    guiState.singlePoseDetection.minPoseConfidence;
-  const multiMinPoseConfidence = guiState.multiPoseDetection.minPoseConfidence;
 
   const poseScoring = new PoseScoring(); // 动作评分模块
   let remotePoseCaching, remotePoseFromCache;
@@ -508,7 +532,7 @@ function detectPoseInRealTime(
         posesQueueLength,
         guiState.singlePoseDetection.minPartConfidence
       );
-      poseConf = singleMinPoseConfidence;
+      poseConf = guiState.singlePoseDetection.minPoseConfidence;
       partConf = guiState.singlePoseDetection.minPartConfidence;
       singlePoseDetectionFrame();
       break;
@@ -521,7 +545,7 @@ function detectPoseInRealTime(
         posesQueueLength,
         guiState.multiPoseDetection.minPartConfidence
       );
-      poseConf = multiMinPoseConfidence;
+      poseConf = guiState.multiPoseDetection.minPoseConfidence;
       partConf = guiState.multiPoseDetection.minPartConfidence;
       multiPoseDetectionFrame();
       break;
@@ -575,15 +599,11 @@ function detectPoseInRealTime(
     const remotePoses = p;
 
     if (flipPoseHorizontal) {
-      // 手动水平翻转(MoveNet没有内置这个功能)
+      // 手动水平翻转（因为是前置摄像头，所以需要手动翻转）
       flipHorizontal(localPoses);
-      flipHorizontal(remotePoses);
     }
 
-    if (
-      remotePoses.length > 0 &&
-      remotePoses[0].score >= singleMinPoseConfidence
-    )
+    if (remotePoses.length > 0 && remotePoses[0].score >= poseConf)
       poseProcessingFrame(
         singlePoseDetectionFrame,
         localPoses[0],
@@ -600,7 +620,7 @@ function detectPoseInRealTime(
       requestAnimationFrame(multiPoseDetectionFrame);
       return;
     }
-    const localPoses = await multiPoseEstimate(remoteVideo);
+    const localPoses = await multiPoseEstimate(localCamera);
     let p;
     if (remotePoseFromCache) {
       p = remotePoseFromCache.getPoses(remoteVideo.currentTime * 1000); // 从缓存中获取远程视频姿态数据
@@ -611,16 +631,12 @@ function detectPoseInRealTime(
     const remotePoses = p;
 
     if (flipPoseHorizontal) {
-      // 手动水平翻转(MoveNet没有内置这个功能)
+      // 手动水平翻转(是用户相机要翻转，因为是前置)
       flipHorizontal(localPoses);
-      flipHorizontal(remotePoses);
     }
 
     // 由于需要平滑波动防止偶然的关节消失，因此即便part没有超过阈值，也要传入
-    if (
-      remotePoses.length > 0 &&
-      remotePoses[0].score >= multiMinPoseConfidence
-    )
+    if (remotePoses.length > 0 && remotePoses[0].score >= poseConf)
       poseProcessingFrame(
         multiPoseDetectionFrame,
         localPoses[0],
@@ -652,12 +668,8 @@ function detectPoseInRealTime(
     if (localPose)
       drawSkeletons(localPose, localSkeletonCtx, poseConf, partConf); // 画本地骨骼
     if (remotePose)
-      drawSkeletons(
-        remotePose,
-        remoteSkeletonCtx,
-        poseConf,
-        partConf
-      ); // 画标准视频骨骼
+      drawSkeletons(remotePose, remoteSkeletonCtx, poseConf, partConf);
+    // 画标准视频骨骼
     else {
       requestAnimationFrame(handle); // remote中没有检测到人，直接跳过这一帧
       return;
@@ -685,6 +697,7 @@ function detectPoseInRealTime(
   }
 }
 
+const displayCache = true;
 function calcCacheInRealTime(remoteVideo) {
   // 计算远程视频的姿态缓存（本函数使用了requestVideoFrameCallback，目前不能在火狐浏览器中运行）
   if (!("requestVideoFrameCallback" in HTMLVideoElement.prototype)) {
@@ -703,6 +716,14 @@ function calcCacheInRealTime(remoteVideo) {
   }
   waiting = 0;
   hideAllModals(); // 关闭所有提示框
+
+  const remoteSkeletonCanvas = document.getElementById("remoteSkeletonCanvas");
+  remoteSkeletonCanvas.width = videoWidth;
+  remoteSkeletonCanvas.height = videoHeight;
+  const remoteSkeletonCtx = remoteSkeletonCanvas.getContext("2d");
+  remoteSkeletonCtx.strokeStyle = "rgba(0, 0, 0, 0.5)"; // 肢体
+  remoteSkeletonCtx.lineWidth = 16;
+  remoteSkeletonCtx.fillStyle = "rgba(238, 130, 238, 0.6)"; // 关节
 
   round = 0; // rAF轮数
 
@@ -772,6 +793,23 @@ function calcCacheInRealTime(remoteVideo) {
     const poses = await multiPoseEstimate(remoteVideo);
     remotePoseCaching.addPoses(poses); // 缓存远程视频姿态数据
 
+    if (displayCache) {
+      console.log(poses);
+      remoteSkeletonCtx.clearRect(
+        0,
+        0,
+        remoteSkeletonCanvas.width,
+        remoteSkeletonCanvas.height
+      );
+      for (const pose of poses)
+        drawSkeletons(
+          pose,
+          remoteSkeletonCtx,
+          guiState.multiPoseDetection.minPoseConfidence,
+          guiState.multiPoseDetection.minPartConfidence
+        );
+    }
+
     // 开始播放（因为摄像头一般加载较慢，所以要先加载好摄像头再播放）
     if (round == 0) {
       remoteVideo.play();
@@ -808,12 +846,7 @@ class PoseWeighting {
         : undefined; // 前一帧的动作位置的前缀和
     const weightedKeypointsPfs = [];
     for (let i = 0; i < this.keypointsLength; i++) {
-      // PosNet:
-      // const position = keypoints[i].position;
-      // const score = keypoints[i].score;
-      // MoveNet:
-      const keypoint = keypoints[i];
-      const score = keypoint.score;
+      const  keypoint = keypoints[i], score = keypoint.score;
       this.latestPartScore[i] = score; // 记录每个关节的最新分数
       try {
         weightedKeypointsPfs.push({
@@ -983,8 +1016,7 @@ class PoseCaching {
   addPoses(poses) {
     // 缓存动作数据
     // 结构: [{keypoints: [{x: number, y: number, score: number, name: string},...], score: number}, ..., number(timestamp)]
-    poses.push(Date.now());
-    this.poseList.push(poses);
+    this.poseList.push([...poses, Date.now()]); // 记录时间戳
   }
   deflateObj(poseListObj) {
     // 压缩动作数据
