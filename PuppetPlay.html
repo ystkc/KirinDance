@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-    <title>古偶新跃...</title>
+    <title>古偶新跃</title>
     <link rel="stylesheet" href="static/css/index.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
   </head>
@@ -13,11 +13,8 @@
       background-size: cover;
     "
   >
-    <div id="info" style="display: none"></div>
-    <div id="loading">Loading the model...</div>
-    <div id="test"></div>
-
     <div class="main" id="main">
+      <div id="info" style="display: none"></div>
       <div style="display: flex; flex-direction: row">
         <div class="canvas-container flip">
           <video id="localVideo" class="video" playsinline></video>
@@ -34,6 +31,8 @@
           <canvas id="remoteCanvas"></canvas>
         </div>
       </div>
+      <div id="loading">Loading the model...</div>
+      <div id="tip" class="tip"></div>
       <div id="score" class="score">得分：</div>
       <div class="round">
         <progress id="progress" value="1" max="1"></progress>
@@ -42,11 +41,13 @@
         <div class="btn" id="start"><div>★Start</div></div>
         <div class="btn" id="pause"><div>Pause</div></div>
         <div class="btn" id="stop"><div>Stop</div></div>
-        <div class="btn" id="cache" style="display: none;"><div>Cache</div></div>
+        <div class="btn" id="cache" style="display: none"><div>Cache</div></div>
       </div>
     </div>
-    <div class="fpsbox" style="width: 100px"></div>
+    <div class="fpsbox" id="fpsbox" style="width: 100px"></div>
     <script>
+      // Modal 模态框，代码来自shadlc（https://github.com/shadlc/BCZ-Group-Manager/blob/main/static/lib/script.js）
+      // @license GPL-3.0
       // 模态框展示模块
       function showModal(content = "", title = "", callback = null) {
         const modalId = `modal-${Date.now()}`;
@@ -123,17 +124,229 @@
     </script>
     <script src="static/js/tf.min.js"></script>
     <script src="static/js/dat.gui.min.js"></script>
-    <!-- PosNet -->
+    <!-- PosNet，国内使用可以修改其中的https://storage.googleapis.com/ 为镜像域名或使用同站资源 -->
     <script src="static/js/posenet.min.js"></script>
-    <!-- MoveNet -->
+    <!-- MoveNet，国内使用可以修改其中的https://tfhub.dev/ 为镜像域名或使用同站资源 -->
     <script src="static/js/pose-detection.min.js"></script>
+    <!-- Stats.js，可选，如果要使用FPS和性能统计组件功能则需要 -->
     <script src="static/js/Stats.min.js"></script>
-    <!-- <script src="static/js/remoteCache.js"></script> -->
-    <script>
-    const example_video = "static/puppet_fixed.mp4";
-    const usePoseNet = true; 
-    </script>
+    <!-- 缓存，15fps大约每秒3KB，可以自行穿插删除降低帧率或在计算缓存时使用低帧率视频 -->
+    <script src="static/js/remoteCachePuppet.js"></script>
     <script type="module" src="static/mjs/camera.mjs"></script>
+    <script type="module">
+      // 动作评分模块使用代码
+      import { ActionCamera } from "./static/mjs/camera.mjs";
+      const DEBUG = true; // 是否开启标准姿态比对模式
+      // ActionCamera类使用方法
+      // 1.初始化
+      const remoteVideo = document.getElementById("remoteVideo");
+      const localCamera = document.getElementById("localVideo");
+      const remoteCanvas = document.getElementById("remoteSkeletonCanvas");
+      const localCanvas = document.getElementById("localSkeletonCanvas");
+      const fpsbox = document.getElementById("fpsbox");
+      const camera = new ActionCamera(
+        remoteVideo,
+        localCamera,
+        remoteCanvas,
+        localCanvas
+      );
+
+      const example_video = "static/puppet_fixed.mp4";
+      const COMP_CATEGORY = {
+        0: null, // 摄像头
+        1: "static/puppet_fixed.mp4", // 标准64s视频
+        2: "static/std_fixed.mp4", // 6s标准视频
+        3: "static/lazy_fixed.mp4", // 懒人示范视频
+        4: "static/crazy_fixed.mp4", // 努力模仿视频
+      };
+      const stats = new Stats();
+
+      function setupFPS() {
+        // 性能统计(FPS、渲染间隔、内存占用)
+        stats.showPanel(0); // 0: fps, 1: ms, 2: mb, 3+: custom
+        fpsbox.appendChild(stats.domElement);
+      }
+      function closeFPS() {
+        stats.domElement.remove();
+      }
+      window.onload = function () {
+        // 2.配置设置
+        // 方法1：
+        // const config = camera.getConfig(); // 修改config不会影响原配置
+        // config. ... = ...
+        // camera.setConfig(config); // 覆盖配置
+        // 方法2：（这种方法需要复制所有配置，建议使用方法1）
+        camera.setConfig({
+          algorithm: "multi-pose", // 姿态识别算法，single-pose或multi-pose
+          input: {
+            usePoseNet: true, // 【🌟】使用PoseNet(true)还是MoveNet(false)，默认使用MoveNet
+            videoWidth: 720,
+            videoHeight: 540,
+          },
+          poseNetInput: {
+            // PosNet的ResNet50/MobileNetV1
+            architecture: "MobileNetV1", // 【🌟】姿态识别模型架构
+            outputStride: 8, // 姿态识别模型输出步长，2的幂，越大越精细，但会增加计算量
+            inputResolution: 200, // 姿态识别模型精度，200-900，越大越精细，但会增加计算量
+            multiplier: 0.75,
+            quantBytes: 2,
+          },
+          moveNetInput: {
+            // MoveNet（注意MoveNet不能检测多人）
+            modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER, // 【🌟】可选SINGLEPOSE_THUNDER或SINGLEPOSE_LIGHTNING
+          },
+          singlePoseDetection: {
+            minPoseConfidence: 0.1, // 最小姿态置信度，越高则越不容易在没人时误判为有人，但也容易无法及时发现人物或产生时有时无的问题
+            // minPartConfidence: 0.5, // PosNet，最小关节点置信度，越高则越不容易将物体误判为关节，但越容易漏关节
+            minPartConfidence: 0.05, // MoveNet的参数略低于PosNet，但效果更好
+          },
+          multiPoseDetection: {
+            maxPoseDetections: 2, // 最多识别人数
+            minPoseConfidence: 0.01, // 同上，越高则越不容易将物体误判为人，但也越容易漏掉人物
+            minPartConfidence: 0.005, // 同上
+            nmsRadius: 30.0, // 非极大值抑制半径，越大则越不容易将相似的姿态合并
+          },
+          output: {
+            // 辅助图形配置
+            showSkeletons: true, // 显示骨架（黑色折线）
+            showPoints: true, // 显示关节点（动态粉色实心圆点）
+            stats: stats, // 性能统计组件
+            flipPoseHorizontal: true, // 手动水平翻转(因为是前置摄像头，所以要手动翻转)
+            posesQueueLength: 5, // 姿态队列长度，越长则越不容易漏掉姿态，但也越容易卡顿
+            displayCacheSkeleton: true, // 缓存过程中是否渲染骨架和关节（同普通骨架和关节颜色）
+          },
+          net: null, // 姿态识别模型对象，null表示尚未加载完毕
+        });
+
+        // 3.下载模型并初始化（先设置配置再初始化，模型选择类的配置（带有🌟标记）修改后要重新调用bindPage）
+        camera.bindPage().then(() => {
+          document.getElementById("loading").style.display = "none";
+        });
+
+        document
+          .getElementById("start")
+          .addEventListener("click", async function () {
+            // 点击开始按钮后的事件处理
+            try {
+              setupFPS();
+              selectAndPlay();
+            } catch (e) {
+              // 将错误信息通过模块显示
+              showError(e);
+            }
+          });
+
+        document.getElementById("pause").addEventListener("click", function () {
+          // 点击暂停按钮后的事件处理
+          try {
+            const remoteVideo = document.getElementById("remoteVideo");
+            if (remoteVideo.paused) {
+              remoteVideo.play();
+            } else {
+              remoteVideo.pause();
+            }
+          } catch (e) {
+            showError(e);
+          }
+        });
+
+        document.getElementById("stop").addEventListener("click", function () {
+          // 点击停止按钮后的事件处理
+          try {
+            closeFPS();
+            camera.stopPlaying();
+          } catch (e) {
+            showError(e);
+          }
+        });
+
+        document.getElementById("cache").addEventListener("click", function () {
+          // 点击缓存按钮后的事件处理
+          try {
+            // 缓存数据，用于比对
+            camera.startCaching(example_video);
+          } catch (e) {
+            showError(e);
+          }
+        });
+
+        const progressBar = document.getElementById("progress"); // 进度条
+        const scoreText = document.getElementById("score"); // 评分显示
+        const tipText = document.getElementById("tip"); // 提示信息
+        setInterval(() => {
+          updateStatus(progressBar, scoreText, tipText);
+        }, 1000); // 1s更新一次
+      };
+
+      async function showError(error) {
+        let info = document.getElementById("info");
+        info.innerHTML = `出现错误：${error.message} <br> 详细信息：${error.stack}`;
+        info.style.display = "block";
+        throw error;
+      }
+
+      function selectAndPlay() {
+        if (DEBUG) {
+          let index = prompt(
+            "请输入标准视频序号：\n" + Object.entries(COMP_CATEGORY).join("\n")
+          );
+          while (!(index in COMP_CATEGORY)) {
+            index = prompt(
+              "请输入正确的序号！\n" + Object.entries(COMP_CATEGORY).join("\n")
+            );
+          }
+          camera.startPlaying(example_video, COMP_CATEGORY[index], remoteCache);
+        } else {
+          camera.startPlaying(example_video, null, remoteCache);
+        }
+      }
+      const TIP_TEXT = {
+        0: "", // 清除提示
+        1: "🔥请远离摄像头，确保全身入镜🔥",
+        2: "❄️请靠近摄像头❄️",
+        3: "🌟请全身入镜🌟",
+        4: "姿势差太多啦",
+      };
+
+      let waitTextShowed = false;
+      function updateStatus(progressBar, scoreText, tipText) {
+        const status = camera.getStatus();
+        tipText.textContent = TIP_TEXT[status.tip]; // 显示提示信息
+        if (status.waiting && !waitTextShowed) {
+          showModal("模型正在加载，请稍候...", "提示");
+          waitTextShowed = true;
+        } else if (!status.waiting && waitTextShowed) {
+          hideAllModals();
+          waitTextShowed = false;
+        }
+        scoreText.textContent = `得分：${status.score.toFixed(2)}`; // 显示评分
+        if (status.paused) scoreText.textContent += " (暂停)"; // 显示暂停状态
+        if (status.finalScore) {
+          showFinalScore(status.finalScore); // 显示最终得分
+        } else {
+          const progress = status.currentTime / status.duration;
+          if (!isNaN(progress)) progressBar.value = progress; // 进度条
+        }
+        if (status.finalRemoteCache) {
+          console.log("Final remote cache:", status.finalRemoteCache);
+          alert("缓存完成！请前往控制台查看");
+        }
+      }
+
+      function showFinalScore(finalScore) {
+        let remark = "";
+        if (finalScore > 90) remark = "<br>太强辣！";
+        else if (finalScore > 80) remark = "<br>相当不错！";
+        else remark = "<br>再接再厉！";
+        showModal(
+          "您的分数是：" +
+            finalScore.toFixed(2) +
+            remark +
+            "<br>刷新页面开始新一轮评分。",
+          "评分结束"
+        );
+      }
+    </script>
 
     <script>
       // if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {

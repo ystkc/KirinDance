@@ -60,3 +60,4 @@ exclude:
   - "*.txt"
   - "*.py"
   - "*.bat"
+  - "*.prproj"

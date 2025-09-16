@@ -1,21 +1,29 @@
+body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .footer-text {
   max-width: 600px;
   text-align: center;
 }
+#loading {
+  font-size: 2rem;
+  background-color: #fff;
+  border-radius: 1rem;
+  z-index: 10;
+}
 
 @media only screen and (max-width: 600px) {
-.footer-text, .dg {
-  display: none;
-}
+  .footer-text,
+  .dg {
+    display: none;
+  }
 }
 .modal {
   transition: opacity 0.5s;
-  background: rgba(0,0,0,0.5);
+  background: rgba(0, 0, 0, 0.5);
 }
-.modal-content {
-  transition: transform 0.5s;
-}
-
 
 .btn-group {
   flex-basis: 100%;
@@ -25,17 +33,18 @@
   padding: 0.5rem;
   overflow: hidden;
 }
-.main{
+.main {
+  display: flex;
   align-items: center;
-    position: relative;
-    top: 12rem;
-    justify-content: center;
-    flex-direction: column;
+  justify-content: center;
+  position: relative;
+  top: 14rem;
+  flex-direction: column;
 }
-.fpsbox{
+.fpsbox {
   /*左下角*/
   position: absolute;
-  bottom: 0;
+  bottom: 24px;
   left: 0;
   width: 100%;
 }
@@ -49,24 +58,24 @@
   white-space: nowrap;
   cursor: pointer;
   padding: 0.3rem 0.5rem 0.5rem 0.3rem;
-  box-shadow: inset -0.4rem -0.4rem 0.1rem 0 rgba(0, 0, 0, 0.2);;
+  box-shadow: inset -0.4rem -0.4rem 0.1rem 0 rgba(0, 0, 0, 0.2);
   border: solid 0.1rem var(--black);
   border-radius: 0.8rem;
   user-select: none;
   transition: all 0.2s ease;
 }
-.btn:focus, input:focus {
+.btn:focus,
+input:focus {
   box-shadow: none !important;
 }
 .btn:active,
 .btn.active {
   padding: 0.5rem 0.3rem 0.3rem 0.5rem;
-  box-shadow: inset 0.4rem 0.4rem 0.1rem 0 rgba(0, 0, 0, 0.2);;
+  box-shadow: inset 0.4rem 0.4rem 0.1rem 0 rgba(0, 0, 0, 0.2);
 }
-.canvas-container{
-  margin: 2rem;
-  padding-top: -10rem;
-  padding-left: -10rem;
+.canvas-container {
+  margin-left: 2rem;
+  margin-right: 2rem;
   position: relative;
   width: 540px;
   height: 405px;
@@ -100,19 +109,19 @@
 .footer {
   width: 50%;
   margin-top: 1rem;
-  justify-content: space-evenly;
+  gap: 30px;
   display: flex;
 }
-.score {
-  margin-top: -1rem;
+.score,
+.tip {
   text-align: center;
   font-size: 2rem;
   font-weight: bold;
   color: var(--black);
 }
-.round{
+.round {
   /*圆角进度条外壳*/
-  width:64rem;
+  width: 64rem;
   border-radius: 5rem;
   overflow: hidden;
 }
@@ -152,8 +161,7 @@ progress::-webkit-progress-bar {
   transition: all 0.5s ease;
 }
 .modal-content {
-  max-height: 90vh;
-  max-width: 80vw;
+  transition: transform 0.5s;
   position: absolute;
   top: 16rem;
   padding: 0.5rem;
@@ -165,7 +173,7 @@ progress::-webkit-progress-bar {
 }
 .modal-title {
   font-weight: bold;
-  font-size: larger;
+  font-size: 2.5rem;
   text-align: center;
   margin: 0 2rem 0.5rem 2rem;
 }
@@ -179,11 +187,16 @@ progress::-webkit-progress-bar {
   right: 0;
   width: 2rem;
   height: 2rem;
-  content: '×';
+  content: "×";
   font-size: 2rem;
   cursor: pointer;
 }
 .modal-body {
+  max-height: 90vh;
+  max-width: 80vw;
+  min-height: 20vh;
+  min-width: 50vw;
+  font-size: 2rem;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -191,6 +204,7 @@ progress::-webkit-progress-bar {
   overflow: scroll;
 }
 .modal-text {
+  font-size: 5rem;
   font-weight: normal;
   width: 100%;
   white-space: pre-wrap;

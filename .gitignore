@@ -19,3 +19,4 @@ _site
 .jekyll-cache
 .jekyll-metadata
 vendor
+*.prproj

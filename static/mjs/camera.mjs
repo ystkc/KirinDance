@@ -1,6 +1,7 @@
 /**
  * @license
  * Modifications Copyright 2025 Cereanilla/SYSU SIC. All Rights Reserved.
+ * 林泽 中山大学集成电路学院
  *
  *    NOTICES FROM ORIGINAL PROJECT:
  *    Original Project: https://github.com/tensorflow/tfjs-models/tree/master/pose-detection
@@ -24,817 +25,962 @@
  */
 
 // 相机模块
-
-const guiState = {
-  // 姿态识别参数设置和对象保存
-  algorithm: "multi-pose", // 姿态识别算法，single-pose或multi-pose
-  input: {
-    // PosNet的ResNet50/MobileNetV1
-    architecture: "MobileNetV1", // 姿态识别模型架构
-    outputStride: 8, // 姿态识别模型输出步长，2的幂，越大越精细，但会增加计算量
-    inputResolution: 200, // 姿态识别模型精度，200-900，越大越精细，但会增加计算量
-    multiplier: 0.75,
-    quantBytes: 2,
-  },
-  moveNetInput: {
-    // MoveNet
-    modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER,
-  },
-  singlePoseDetection: {
-    minPoseConfidence: 0.1, // 最小姿态置信度，越高则越不容易在没人时误判为有人，但也容易无法及时发现人物或产生时有时无的问题
-    // minPartConfidence: 0.5, // PosNet，最小关节点置信度，越高则越不容易将物体误判为关节，但越容易漏关节
-    minPartConfidence: 0.1, // MoveNet的参数略低于PosNet，但效果更好
-  },
-  multiPoseDetection: {
-    maxPoseDetections: 5, // 最多识别人数
-    minPoseConfidence: 0.15, // 同上，越高则越不容易将物体误判为人，但也越容易漏掉人物
-    minPartConfidence: 0.1, // 同上
-    nmsRadius: 30.0, // 非极大值抑制半径，越大则越不容易将相似的姿态合并
-  },
-  output: {
-    // 辅助图形配置
-    showSkeletons: true, // 显示骨架（黑色折线）
-    showPoints: true, // 显示关节点（动态粉色实心圆点）
-    showStandardTrack: true, // 显示标准轨迹（灰色半透明粗线条）
-    showUserTrack: true, // 显示用户轨迹（黄色实线条）
-    showStandardNodes: true, // 显示标准节点（静态的粉色、绿色和蓝色半透明圆点）
-    showUserNodes: false, // 显示用户节点（静态的黄色半透明圆点）
-    showScore: false, // 在每段用户轨迹中部显示评分（静态的黑色文字，整数）
-  },
-  net: null, // 姿态识别模型对象，null表示尚未加载完毕
-}; // PosNet和MoveNet都在库中硬编码了从google云下载的模型，大约几十MB，国内需要魔法
-// 我修改了pose-detection.min.js，将其中的所有https://tfhub.dev/删去，这样所有的资源都会从本域名加载(就是从本项目的google文件夹)
-let flipPoseHorizontal = true; // 手动水平翻转(因为是前置摄像头，所以要手动翻转)
-// usePoseNet变量，在index.html中定义，使用poseNet还是MoveNet，默认使用MoveNet
-
-function toggleLoadingUI( // 显示或关闭加载中的文本元素
-  showLoadingUI,
-  loadingDivId = "loading",
-  mainDivId = "main"
-) {
-  if (showLoadingUI) {
-    document.getElementById(loadingDivId).style.display = "block";
-    document.getElementById(mainDivId).style.display = "flex";
-  } else {
-    document.getElementById(loadingDivId).style.display = "none";
-    document.getElementById(mainDivId).style.display = "flex";
-  }
-}
-
-export async function bindPage() {
-  // 加载posnet模型
-  toggleLoadingUI(true); // 显示模型加载中的提示
-  // 以下所有标记PosNet:和MoveNet:的注释都是可以互相替换的，分别代表两种不同的姿态识别方案
-  let net;
-  if (usePoseNet) {
-    net = await posenet.load({
-      architecture: guiState.input.architecture,
-      outputStride: guiState.input.outputStride,
-      inputResolution: guiState.input.inputResolution,
-      multiplier: guiState.input.multiplier,
-      quantBytes: guiState.input.quantBytes,
-    });
-  } else {
-    // MoveNet:
-    const model = poseDetection.SupportedModels.MoveNet;
-    const detectorConfig = {
-      modelType: guiState.moveNetInput.modelType,
-    };
-    net = await poseDetection.createDetector(model, detectorConfig); // 异步下载
-  }
-  toggleLoadingUI(false); // 关闭模型加载中的提示
-  guiState.net = net; // 保存模型对象
-}
-
-bindPage(); // posenet模型需要联网加载，所以预先异步加载(无需等待DOM加载完成)
-
-const width = 720; // 观察画面尺寸，注意要与源视频尺寸一致（不宜过大，显卡性能限制，不掉帧即可）
-const height = 540;
-
-let enabled_1 = false; // 标记运行状态
-let halt = false; // 标记用户是否手动停止了播放视频
-let cameraStream = null; // 用户摄像头流，点击开始时初始化，结束时用于关闭摄像头
-
-let round = -1; // 标记当前rAF轮数，刚开始的一轮需要特殊处理（-1未开始或已结束，0准备中）
-let waiting = 0; // 标记等待模型加载完毕的提示框是否已经显示
-
-// 标准视频在index.html中定义，建议简单背景，单人全身，使用适合web加载的视频格式，widthxheight的分辨率
-
-const videoWidth = width;
-const videoHeight = height;
-const stats = new Stats(); // 性能统计模块
-
-function setupFPS() {
-  // 性能统计(FPS、渲染间隔、内存占用)
-  stats.showPanel(0); // 0: fps, 1: ms, 2: mb, 3+: custom
-  document.querySelector(".fpsbox").appendChild(stats.domElement);
-}
-function closeFPS() {
-  stats.domElement.remove();
-}
-
-navigator.getUserMedia =
-  navigator.getUserMedia ||
-  navigator.webkitGetUserMedia ||
-  navigator.mozGetUserMedia; // 兼容性处理
-
-window.onload = function () {
-  document.getElementById("start").addEventListener("click", async function () {
-    // 点击开始按钮后的事件处理
-    try {
-      // 将错误信息通过模块显示
-      startPlaying();
-    } catch (e) {
-      showError(e);
-    }
-  });
-
-  document.getElementById("pause").addEventListener("click", function () {
-    // 点击暂停按钮后的事件处理
-    try {
-      const remoteVideo = document.getElementById("remoteVideo");
-      if (remoteVideo.paused) {
-        remoteVideo.play();
-      } else {
-        remoteVideo.pause();
-      }
-    } catch (e) {
-      showError(e);
-    }
-  });
-
-  document.getElementById("stop").addEventListener("click", function () {
-    // 点击停止按钮后的事件处理
-    try {
-      stopPlaying();
-    } catch (e) {
-      showError(e);
-    }
-  });
-
-  document.getElementById("cache").addEventListener("click", function () {
-    // 点击缓存按钮后的事件处理
-    try {
-      // 缓存数据，用于比对
-      startCaching();
-    } catch (e) {
-      showError(e);
-    }
-  });
-};
-
-async function showError(error) {
-  let info = document.getElementById("info");
-  info.textContent = `出现错误：${error.message} 详细信息：${error.stack}`;
-  info.style.display = "block";
-  info.style.color = "red";
-  throw error;
-}
-
-const standardCompare = false; // 标准对照模式，将标准视频当成用户输入，用于测试算法是否能正确评分
-async function startPlaying() {
-  if (enabled_1) return; // 要先停止才能切换录制和评分模式
-  enabled_1 = true; // 标记正在运行
-  setupFPS(); // 在左下角打开性能统计
-
-  const remoteVideo = document.getElementById("remoteVideo");
-  loadRemoteVideo(remoteVideo); // 配置远程视频（加载标准视频，用于教学和比对）
-
-  const leftSkeletonCanvas = document.getElementById("localSkeletonCanvas"); // 骨架画布
-  const rightSkeletonCanvas = document.getElementById("remoteSkeletonCanvas"); // 骨架画布
-
-  const userCameraCanvas = document.getElementById("localVideo");
-  if (!standardCompare) {
-    try {
-      loadCameraCanvas(userCameraCanvas); // 配置用户的摄像头（打开并开始拍摄，但是还没有保存，也没有处理）
-    } catch (e) {
-      throw new Error("加载摄像头失败，请确认当前设备有摄像头：" + e.message);
-    }
-    detectPoseInRealTime(
-      userCameraCanvas,
-      remoteVideo,
-      leftSkeletonCanvas,
-      rightSkeletonCanvas,
-      remoteCache // 在HTML中通过script标签加载的静态缓存数据。目前只有一个视频，就不做另外的逻辑了
-    ); // 主模块，用于姿态识别并评分
-  } else {
-    // 配置用户的摄像头（加载标准视频，用于教学和比对）
-    const index = parseInt(prompt("请输入标准视频序号："));
-    if (index === 1) {
-      loadRemoteVideo(userCameraCanvas); // 标准视频
-    } else if (index === 2) {
-      loadRemoteVideo(userCameraCanvas, "static/std_fixed.mp4"); // 6s标准视频
-    } else if (index === 3) {
-      loadRemoteVideo(userCameraCanvas, "static/lazy_fixed.mp4"); // 懒人示范视频
-    } else if (index === 4) {
-      loadRemoteVideo(userCameraCanvas, "static/crazy_fixed.mp4"); // 努力模仿视频
-    }
-    userCameraCanvas.parentNode.classList.remove("flip"); // 标准对照模式使用视频而不是前置摄像头，需要取消反转
-    flipPoseHorizontal = false; // 标准对照模式不需要手动翻转
-    detectPoseInRealTime(
-      userCameraCanvas,
-      remoteVideo,
-      leftSkeletonCanvas,
-      rightSkeletonCanvas,
-      remoteCache
-    );
-  }
-}
-
-async function startCaching() {
-  // 缓存数据，用于比对
-  if (enabled_1) return; // 要先停止才能切换录制和评分模式
-  enabled_1 = true; // 标记正在运行
-  setupFPS(); // 在左下角打开性能统计
-  const remoteVideo = document.getElementById("remoteVideo");
-  loadRemoteVideo(remoteVideo); // 配置远程视频（加载标准视频，用于计算姿态并缓存）
-
-  calcCacheInRealTime(remoteVideo);
-}
-
-async function stopPlaying() {
-  const remoteVideo = document.getElementById("remoteVideo");
-  const localVideo = document.getElementById("localVideo");
-  if (round > -1) {
-    halt = true; // 停止远程视频播放，先停止detect pose
-    return;
-  }
-  halt = false;
-  enabled_1 = false;
-  closeFPS();
-  // stop the message source
-  if (remoteVideo.src) {
-    // 是个链接，需要清除
-    remoteVideo.setAttribute("src", "");
-    remoteVideo.style.opacity = 0;
-    localVideo.setAttribute("src", "");
-    localVideo.style.opacity = 0;
-  }
-  // close the camera
-  if (cameraStream) {
-    cameraStream.getTracks().forEach((track) => track.stop());
-    cameraStream = null;
-  }
-}
-
-// 平台检测
-function isAndroid() {
-  return /Android/i.test(navigator.userAgent);
-}
-
-function isiOS() {
-  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
-}
-
-function isMobile() {
-  return isAndroid() || isiOS();
-}
-
-// 打开摄像头
-async function setupCamera(cameraCanvas) {
-  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-    throw new Error(
-      "Browser API navigator.mediaDevices.getUserMedia not available"
-    );
-  }
-
-  cameraCanvas.width = videoWidth;
-  cameraCanvas.height = videoHeight;
-
-  const mobile = isMobile();
-  cameraStream = await navigator.mediaDevices.getUserMedia({
-    audio: false,
-    video: {
-      facingMode: "user",
-      width: mobile ? undefined : videoWidth,
-      height: mobile ? undefined : videoHeight,
+export class ActionCamera {
+  DEFAULT_CONFIG = {
+    // 姿态识别参数设置和对象保存
+    algorithm: "multi-pose", // 姿态识别算法，single-pose或multi-pose
+    input: {
+      usePoseNet: false, // 【🌟】使用PoseNet(true)还是MoveNet(false)，默认使用MoveNet
+      videoWidth: 720,
+      videoHeight: 540,
+      loadedCallback: null, // 模型加载完成回调函数
     },
-  });
-  cameraCanvas.srcObject = cameraStream;
+    poseNetInput: {
+      // PosNet
+      architecture: "MobileNetV1", // 【🌟】ResNet50/MobileNetV1，姿态识别模型架构
+      outputStride: 8, // 【🌟】姿态识别模型输出步长，MobileNetV1=8/16，ResNet50=16/32，越大越精细，但会增加计算量
+      inputResolution: 200, // 姿态识别模型精度，200-900，越大越精细，但会增加计算量
+      multiplier: 0.75, // 【🌟】姿态识别模型缩放比例，0.5/0.75/1.0，越大越精细，但会增加计算量
+      quantBytes: 2, // 【🌟】1/2/4，模型权重量化比例，越大越精细，但会增加计算量
+    },
+    moveNetInput: {
+      // MoveNet
+      modelType: poseDetection.movenet.modelType.SINGLEPOSE_THUNDER, // 【🌟】可选SINGLEPOSE_THUNDER或SINGLEPOSE_LIGHTNING
+    },
+    singlePoseDetection: {
+      minPoseConfidence: 0.1, // 最小姿态置信度，越高则越不容易在没人时误判为有人，但也容易无法及时发现人物或产生时有时无的问题
+      // minPartConfidence: 0.5, // PosNet，最小关节点置信度，越高则越不容易将物体误判为关节，但越容易漏关节
+      minPartConfidence: 0.05, // MoveNet的参数略低于PosNet，但效果更好
+    },
+    multiPoseDetection: {
+      maxPoseDetections: 3, // 最多识别人数
+      minPoseConfidence: 0.01, // 同上，越高则越不容易将物体误判为人，但也越容易漏掉人物
+      minPartConfidence: 0.005, // 同上
+      nmsRadius: 30.0, // 非极大值抑制半径，越大则越不容易将相似的姿态合并
+    },
+    output: {
+      // 辅助图形配置
+      showSkeletons: true, // 显示骨架（黑色折线）
+      showPoints: true, // 显示关节点（动态粉色实心圆点）
+      stats: null, // Stats.js中的Stats对象，或者任何拥有begin和end方法的对象，本类会在每一帧处理时调用一次，null则禁用
+      // showStandardTrack: true, // 显示标准轨迹（灰色半透明粗线条）
+      // showUserTrack: true, // 显示用户轨迹（黄色实线条）
+      // showStandardNodes: true, // 显示标准节点（静态的粉色、绿色和蓝色半透明圆点）
+      // showUserNodes: false, // 显示用户节点（静态的黄色半透明圆点）
+      // showScore: false, // 在每段用户轨迹中部显示评分（静态的黑色文字，整数）
+      flipPoseHorizontal: true, // 手动水平翻转(因为是前置摄像头，所以要手动翻转)
+      posesQueueLength: 5, // 姿态队列长度，越长则越不容易漏掉姿态，但也越容易卡顿
+      displayCacheSkeleton: true, // 缓存过程中是否渲染骨架和关节（同普通骨架和关节颜色）
+    },
+    net: null, // 姿态识别模型对象，null表示尚未加载完毕
+  };
 
-  return new Promise((resolve) => {
-    cameraCanvas.onloadedmetadata = () => {
-      resolve(cameraCanvas);
-    };
-  });
-}
+  constructor(
+    remoteVideo,
+    localCamera,
+    remoteCanvas,
+    localCanvas,
+    config = null
+  ) {
+    this.checkConfig(config); // 检查配置参数是否合法
+    this.remoteVideo = remoteVideo; // 远端标准视频video元素
+    // 标准视频可用remoteVideo的src属性或source设置，建议简单背景，单人全身，使用适合web加载的视频格式，widthxheight的分辨率
+    this.localCamera = localCamera; // 本地摄像头video元素
+    this.remoteCanvas = remoteCanvas; // 远端标准动作骨架canvas元素
+    this.localCanvas = localCanvas; // 本地摄像头用户动作骨架canvas元素
+    // 我修改了pose-detection.min.js，将其中的所有https://tfhub.dev/删去，这样所有的资源都会从本域名加载(就是从本项目的google文件夹)
+    // usePoseNet变量，在index.html中定义，使用poseNet还是MoveNet，默认使用MoveNet
 
-// 将画布连接到用户摄像头
-async function loadCameraCanvas(userCameraCanvas) {
-  userCameraCanvas = await setupCamera(userCameraCanvas); // 打开摄像头
-  userCameraCanvas.style.opacity = 1;
-  userCameraCanvas.width = videoWidth;
-  userCameraCanvas.height = videoHeight;
-  userCameraCanvas.play(); // 开始拍摄（但是还没有保存，也没有处理）
-}
+    this.enabled_1 = false; // 标记运行状态
+    this.halt = false; // 标记用户是否手动停止了播放视频
+    this.cameraStream = null; // 用户摄像头流，点击开始时初始化，结束时用于关闭摄像头
 
-// 将画布连接到标准视频
-async function loadRemoteVideo(remoteVideo, customSrc) {
-  if (!customSrc) customSrc = example_video;
-  remoteVideo.src = customSrc;
-  remoteVideo.load();
-  remoteVideo.style.opacity = 1;
-  remoteVideo.width = videoWidth;
-  remoteVideo.height = videoHeight;
-}
+    this.round = -1; // 标记当前rAF轮数，刚开始的一轮需要特殊处理（-1未开始或已结束，0准备中）
+    this.waiting = 0; // 标记等待模型加载完毕的提示框是否已经显示
+    this.tip = 0; // 提示用户的站立位置（远离、靠近、调整摄像头）
 
-const seg = [
-  // 关节连接关系，两两链接
-  5, 6, 5, 7, 5, 11, 7, 9, 6, 8, 6, 12, 8, 10, 11, 13, 13, 15, 12, 14, 14, 16,
-  11, 12,
-];
-const segCnt = 12; // 肢体段数
-const pointCnt = 17; // 关节点数
-function drawSkeletons(pose, skeletonCtx, poseConf, partConf) {
-  // pose结构: {keypoints: [{position: {x: number, y: number}, score: number},...], score: number}
-  // 绘制人体骨骼
-  if (pose.score < poseConf) return; // 姿态置信度不够，不画
-  const keypoints = pose.keypoints;
-  if (guiState.output.showSkeletons) {
-    skeletonCtx.beginPath();
-    for (let i = 0; i < segCnt; i++) {
-      // 遍历每一段肢体
-      const start = seg[i << 1]; // 开始关节
-      const end = seg[(i << 1) | 1]; // 结束关节
-      const pointStart = keypoints[start]; // 开始关节坐标
-      const pointEnd = keypoints[end]; // 结束关节坐标
-      if (
-        pointStart.x === null ||
-        pointEnd.x === null ||
-        keypoints[start].score < partConf ||
-        keypoints[end].score < partConf
-      )
-        continue; // 有其中一个关节没有出现或置信度不够，这一段肢体不画
-      skeletonCtx.moveTo(pointStart.x, pointStart.y);
-      skeletonCtx.lineTo(pointEnd.x, pointEnd.y);
+    this.seg = [
+      // 关节连接关系，两两链接
+      5, 6, 5, 7, 5, 11, 7, 9, 6, 8, 6, 12, 8, 10, 11, 13, 13, 15, 12, 14, 14,
+      16, 11, 12,
+    ];
+    this.segCnt = 12; // 肢体段数
+    this.pointCnt = 17; // 关节点数
+
+    navigator.getUserMedia =
+      navigator.getUserMedia ||
+      navigator.webkitGetUserMedia ||
+      navigator.mozGetUserMedia; // 兼容性处理
+
+    this.finalScore = 0; // 检测到视频结束时，返回最终分数而不再是最近1s的平均分
+    this.finalRemoteCache = null; // 远端视频缓存数据（在完成姿态识别全部过程后跟着最终分数一起返回）
+
+    this.poseScoring = new PoseScoring(); // 动作评分模块
+
+    if (config) {
+      this.Config = this._copy(config); // 姿态识别参数配置
+    } else {
+      this.Config = this._copy(DEFAULT_CONFIG); // PosNet和MoveNet都在库中硬编码了从google云下载的模型，大约几十MB，国内需要魔法
     }
-    skeletonCtx.stroke();
+    this._bindPage().then(this.Config.input.loadedCallback); // posenet模型需要联网加载，所以预先异步加载(无需等待DOM加载完成)
   }
-  // 绘制关节
-  if (guiState.output.showPoints) {
-    skeletonCtx.beginPath();
-    for (let i = 0; i < keypoints.length; i++) {
-      const point = keypoints[i];
-      if (
-        (i > 0 && i < 5) ||
-        point.x === null ||
-        keypoints[i].score < partConf
-      ) {
-        continue; // 头部不画左右眼、左右耳，只画鼻子
+
+  getConfig() {
+    // 获取姿态识别参数配置
+    return this._copy(this.Config);
+  }
+  _copy(origin) {
+    // 递归拷贝origin对象
+    const result = {};
+    for (const [key, value] of Object.entries(origin)) {
+      if (typeof value === "object" && value !== null) {
+        result[key] = this._copy(value);
+      } else {
+        result[key] = value;
       }
-      // 避免圆点之间被填充
-      skeletonCtx.moveTo(point.x, point.y);
-      // 绘制圆点
-      skeletonCtx.arc(point.x, point.y, 16, 0, Math.PI * 2);
     }
-    skeletonCtx.fill();
+    return result;
   }
-}
-
-function standardize(poses) {
-  // 将PosNet的输出结果统一为MoveNet的输出格式：
-  const after = poses.map((pose) => {
-    return {
-      keypoints: pose.keypoints.map((keypoint) => {
-        return {
-          x: keypoint.position.x,
-          y: keypoint.position.y,
-          score: keypoint.score,
-        };
-      }),
-      score: pose.score,
+  checkConfig(config) {
+    // 检查配置参数是否合法
+    const input = config.input;
+    const poseNetInput = config.poseNetInput;
+    const moveNetInput = config.moveNetInput;
+    const singlePoseDetection = config.singlePoseDetection;
+    const multiPoseDetection = config.multiPoseDetection;
+    const output = config.output;
+    if (input.videoWidth % 1 !== 0 || input.videoHeight % 1 !== 0) {
+      throw new Error(
+        "input.videoWidth and input.videoHeight must be integers"
+      );
+    }
+    if (input.loadedCallback && typeof input.loadedCallback !== "function") {
+      throw new Error("input.loadedCallback must be a function");
+    }
+    if (input.usePoseNet) {
+      // 使用PoseNet
+      if (poseNetInput.architecture === "MobileNetV1") {
+        if (
+          poseNetInput.outputStride !== 8 &&
+          poseNetInput.outputStride !== 16
+        ) {
+          throw new Error(
+            "MobileNetV1 poseNetInput.outputStride must be 8 or 16"
+          );
+        }
+        if (
+          poseNetInput.multiplier !== 0.5 ||
+          poseNetInput.multiplier !== 0.75 ||
+          poseNetInput.multiplier !== 1.0
+        ) {
+          throw new Error(
+            "MobileNetV1 poseNetInput.multiplier must be 0.5, 0.75 or 1.0"
+          );
+        }
+      } else if (poseNetInput.architecture === "ResNet50") {
+        if (
+          poseNetInput.outputStride !== 16 &&
+          poseNetInput.outputStride !== 32
+        ) {
+          throw new Error("poseNetInput.outputStride must be 16 or 32");
+        }
+        if (poseNetInput.multiplier !== 1.0) {
+          throw new Error("MobileNetV1 poseNetInput.multiplier must be 1.0");
+        }
+      } else {
+        throw new Error(
+          "poseNetInput.architecture must be MobileNetV1 or ResNet50"
+        );
+      }
+      if (
+        poseNetInput.inputResolution < 200 ||
+        poseNetInput.inputResolution > 900
+      ) {
+        throw new Error(
+          "poseNetInput.inputResolution must be between 200 and 900"
+        );
+      }
+      if (
+        poseNetInput.quantBytes !== 1 &&
+        poseNetInput.quantBytes !== 2 &&
+        poseNetInput.quantBytes !== 4
+      ) {
+        throw new Error("poseNetInput.quantBytes must be 1, 2 or 4");
+      }
+    } else {
+      // 使用MoveNet
+      if (
+        moveNetInput.modelType !==
+          poseDetection.movenet.modelType.SINGLEPOSE_THUNDER &&
+        moveNetInput.modelType !==
+          poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING
+      ) {
+        throw new Error(
+          "moveNetInput.modelType must be SINGLEPOSE_THUNDER or SINGLEPOSE_LIGHTNING"
+        );
+      }
+    }
+    if (
+      singlePoseDetection.minPoseConfidence < 0 ||
+      singlePoseDetection.minPoseConfidence > 1
+    ) {
+      throw new Error(
+        "singlePoseDetection.minPoseConfidence must be between 0 and 1"
+      );
+    }
+    if (
+      singlePoseDetection.minPartConfidence < 0 ||
+      singlePoseDetection.minPartConfidence > 1
+    ) {
+      throw new Error(
+        "singlePoseDetection.minPartConfidence must be between 0 and 1"
+      );
+    }
+    if (
+      multiPoseDetection.maxPoseDetections < 1 ||
+      multiPoseDetection.maxPoseDetections > 10 ||
+      multiPoseDetection.maxPoseDetections % 1 !== 0
+    ) {
+      throw new Error(
+        "multiPoseDetection.maxPoseDetections must be an integer and between 1 and 10"
+      );
+    }
+    if (
+      multiPoseDetection.minPoseConfidence < 0 ||
+      multiPoseDetection.minPoseConfidence > 1
+    ) {
+      throw new Error(
+        "multiPoseDetection.minPoseConfidence must be between 0 and 1"
+      );
+    }
+    if (
+      multiPoseDetection.minPartConfidence < 0 ||
+      multiPoseDetection.minPartConfidence > 1
+    ) {
+      throw new Error(
+        "multiPoseDetection.minPartConfidence must be between 0 and 1"
+      );
+    }
+    if (multiPoseDetection.nmsRadius < 0) {
+      throw new Error("multiPoseDetection.nmsRadius must be positive");
+    }
+    if (output.showSkeletons !== true && output.showSkeletons !== false) {
+      throw new Error("output.showSkeletons must be true or false");
+    }
+    if (output.showPoints !== true && output.showPoints !== false) {
+      throw new Error("output.showPoints must be true or false");
+    }
+    if (output.stats && typeof output.stats.begin !== "function") {
+      throw new Error("output.stats must have a begin() method");
+    }
+    if (output.stats && typeof output.stats.end !== "function") {
+      throw new Error("output.stats must have an end() method");
+    }
+    if (
+      output.flipPoseHorizontal !== true &&
+      output.flipPoseHorizontal !== false
+    ) {
+      throw new Error("output.flipPoseHorizontal must be true or false");
+    }
+    if (output.posesQueueLength < 1 || output.posesQueueLength > 10) {
+      throw new Error("output.posesQueueLength must be between 1 and 10");
+    }
+    if (
+      output.displayCacheSkeleton !== true &&
+      output.displayCacheSkeleton !== false
+    ) {
+      throw new Error("output.displayCacheSkeleton must be true or false");
+    }
+  }
+  setConfig(config) {
+    // 设置姿态识别参数配置
+    this.checkConfig(config);
+    // 检查需要重载的几个配置有无改变
+    const usePoseNet = config.input.usePoseNet;
+    const architecture = config.poseNetInput.architecture;
+    const outputStride = config.poseNetInput.inputResolution;
+    const multiplier = config.poseNetInput.multiplier;
+    const quantBytes = config.poseNetInput.quantBytes;
+    const modelType = config.moveNetInput.modelType;
+    this.Config = this._copy(config);
+    if (
+      usePoseNet !== this.Config.input.usePoseNet ||
+      architecture !== this.Config.poseNetInput.architecture ||
+      outputStride !== this.Config.poseNetInput.outputStride ||
+      multiplier !== this.Config.poseNetInput.multiplier ||
+      quantBytes !== this.Config.poseNetInput.quantBytes ||
+      modelType !== this.Config.moveNetInput.modelType
+    ) {
+      // 重载模型
+      this._bindPage(); // 重新加载模型
+    }
+  }
+  getStatus() {
+    // 获取当前运行状态（在开始后定时调用，以获取最新分数）
+    const result = {
+      score: this.poseScoring.averageScore(Date.now()), // 最新1s内分数
+      tip: this.tip, // 提示用户的站立位置（远离、靠近、调整摄像头）
+      paused: this.remoteVideo.paused && this.enabled_1, // 是否暂停播放（姿态解算不暂停，可用于调整模仿）
+      currentTime: this.remoteVideo.currentTime, // 当前视频播放位置
+      duration: this.remoteVideo.duration, // 当前视频总时长
+      finalScore: this.finalScore, // 是否有最终分数返回（每次播放只会返回一次）
+      finalRemoteCache: this.finalRemoteCache, // 是否有标准视频缓存数据返回（每次播放只会返回一次）
+      waiting: this.waiting, // 模型是否还在加载
     };
-  });
-  return after;
-}
-
-async function singlePoseEstimate(video) {
-  // 单人姿态识别
-  // PosNet:
-  if (usePoseNet) {
-    return standardize(
-      await guiState.net.estimatePoses(video, {
-        decodingMethod: "single-person",
-      })
-    );
-  } else {
-    // MoveNet:
-    return await guiState.net.estimatePoses(video);
+    this.finalScore = null; // 只返回一次结束信号
+    this.finalRemoteCache = null; // 只返回一次缓存
+    return result;
   }
-}
 
-async function multiPoseEstimate(video) {
-  // 多人姿态识别
-  // PosNet:
-  if (usePoseNet) {
-    return standardize(
-      await guiState.net.estimatePoses(video, {
-        decodingMethod: "multi-person",
-        maxDetections: guiState.multiPoseDetection.maxPoseDetections,
-        scoreThreshold: guiState.multiPoseDetection.minPartConfidence,
-        nmsRadius: guiState.multiPoseDetection.nmsRadius,
-      })
-    );
-  } else {
-    // MoveNet:（注意，MoveNet不能检测多人，只会返回一个长度的数组）
-    return await guiState.net.estimatePoses(video, {
-      maxDetections: guiState.multiPoseDetection.maxPoseDetections,
-      scoreThreshold: guiState.multiPoseDetection.minPartConfidence,
-      nmsRadius: guiState.multiPoseDetection.nmsRadius,
+  async _bindPage() {
+    // 加载模型
+    if (this.Config.net) {
+      // 已经加载过模型，先清除
+      this.Config.net.dispose();
+      this.Config.net = null; // 如果这是开始，则要求用户等待
+    }
+    if (this.Config.input.usePoseNet) {
+      this.Config.net = await posenet.load({
+        architecture: this.Config.poseNetInput.architecture,
+        outputStride: this.Config.poseNetInput.outputStride,
+        inputResolution: this.Config.poseNetInput.inputResolution,
+        multiplier: this.Config.poseNetInput.multiplier,
+        quantBytes: this.Config.poseNetInput.quantBytes,
+      });
+    } else {
+      // MoveNet:
+      const model = poseDetection.SupportedModels.MoveNet;
+      const detectorConfig = {
+        modelType: this.Config.moveNetInput.modelType,
+      };
+      this.Config.net = await poseDetection.createDetector(
+        model,
+        detectorConfig
+      ); // 异步下载
+    }
+  }
+
+  async startPlaying(
+    standardSrc,
+    customSrc = null,
+    standardCache = null,
+    customCache = null
+  ) {
+    // standardSrc：标准视频源url；customSrc：自定义视频源url（若为null，则打开摄像头获取）
+    // 自定义视频源可用于加载标准视频，对照，将标准视频当成用户输入，用于测试算法是否能正确评分
+    // standardCache：标准视频缓存数据；customCache：自定义视频缓存数据（若为null，则实时解算）
+    if (this.enabled_1) return false; // 要先停止才能切换录制和评分模式
+    this.enabled_1 = true; // 标记正在运行
+
+    const remoteVideo = this.remoteVideo;
+    const leftSkeletonCanvas = this.localCanvas; // 骨架画布
+    const rightSkeletonCanvas = this.remoteCanvas; // 骨架画布
+    const userCameraCanvas = this.localCamera;
+
+    this._loadRemoteVideo(remoteVideo, standardSrc); // 配置远程视频（加载标准视频，用于教学和比对）
+
+    if (customSrc) {
+      // 链接获取用户动作
+      this._loadRemoteVideo(localVideo, customSrc);
+      this.Config.output.flipPoseHorizontal = false; // 视频模式或后置摄像头不需要翻转（前置摄像头才要）
+      userCameraCanvas.style.transform = "scaleX(1)"; // 取消画布翻转
+      this._detectPoseInRealTime(standardCache, customSrc);
+    } else {
+      // 摄像头获取用户动作
+      this.Config.output.flipPoseHorizontal = true; // 手动翻转，因为是前置摄像头
+      userCameraCanvas.style.transform = "scaleX(-1)"; // 手动翻转画布
+      try {
+        this._loadCameraCanvas(userCameraCanvas); // 配置用户的摄像头（打开并开始拍摄，但是还没有保存，也没有处理）
+      } catch (e) {
+        throw new Error("加载摄像头失败，请确认当前设备有摄像头：" + e.message);
+      }
+      this._detectPoseInRealTime(
+        standardCache,
+        customCache // 在HTML中通过script标签加载的静态缓存数据
+      ); // 主模块，用于姿态识别并评分
+    }
+    return true; // 成功开启
+  }
+
+  async startCaching(standardSrc) {
+    // 缓存数据，用于比对
+    if (this.enabled_1) return false; // 要先停止才能切换录制和评分模式
+    this.enabled_1 = true; // 标记正在运行
+    const remoteVideo = this.remoteVideo;
+    this._loadRemoteVideo(remoteVideo, standardSrc); // 配置远程视频（加载标准视频，用于计算姿态并缓存）
+    this._calcCacheInRealTime(remoteVideo);
+  }
+
+  async stopPlaying() {
+    const remoteVideo = this.remoteVideo;
+    const localCamera = this.localCamera;
+    if (this.round > -1) {
+      this.halt = true; // 停止远程视频播放，先停止detect pose
+      return;
+    }
+    this.halt = false;
+    this.enabled_1 = false;
+    // close the camera
+    if (this.cameraStream) {
+      this.cameraStream.getTracks().forEach((track) => track.stop());
+      this.cameraStream = null;
+    }
+    // stop the message source
+    if (this.remoteVideo.src) {
+      // 是个链接，需要清除
+      remoteVideo.setAttribute("src", "");
+      remoteVideo.style.opacity = 0;
+      localCamera.setAttribute("src", "");
+      localCamera.style.opacity = 0;
+    }
+  }
+
+  // 打开摄像头
+  async _setupCamera(cameraCanvas) {
+    // 平台检测
+    function isAndroid() {
+      return /Android/i.test(navigator.userAgent);
+    }
+
+    function isiOS() {
+      return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+    }
+
+    function isMobile() {
+      return isAndroid() || isiOS();
+    }
+
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error(
+        "Browser API navigator.mediaDevices.getUserMedia not available"
+      );
+    }
+
+    const videoWidth = this.Config.input.videoWidth;
+    const videoHeight = this.Config.input.videoHeight;
+    cameraCanvas.width = videoWidth;
+    cameraCanvas.height = videoHeight;
+
+    const mobile = isMobile();
+    this.cameraStream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: "user",
+        width: mobile ? undefined : videoWidth,
+        height: mobile ? undefined : videoHeight,
+      },
+    });
+    cameraCanvas.srcObject = this.cameraStream;
+
+    return new Promise((resolve) => {
+      cameraCanvas.onloadedmetadata = () => {
+        resolve(cameraCanvas);
+      };
     });
   }
-}
 
-function chkNotReady(video) {
-  return video.readyState !== video.HAVE_ENOUGH_DATA;
-}
+  // 将画布连接到用户摄像头
+  async _loadCameraCanvas(userCameraCanvas) {
+    userCameraCanvas = await this._setupCamera(userCameraCanvas); // 打开摄像头
+    userCameraCanvas.style.opacity = 1;
+    userCameraCanvas.width = this.Config.input.videoWidth;
+    userCameraCanvas.height = this.Config.input.videoHeight;
+    userCameraCanvas.play(); // 开始拍摄（但是还没有保存，也没有处理）
+  }
 
-function flipHorizontal(poses) {
-  // 手动水平翻转(MoveNet没有内置这个功能)
-  poses.forEach((pose) => {
-    pose.keypoints.forEach((keypoint) => {
-      keypoint.x = videoWidth - keypoint.x; // 至于为何要乘0.75(画框和原视频比例)，暂时不清楚
-      keypoint.y = keypoint.y;
+  // 将画布连接到标准视频
+  async _loadRemoteVideo(remoteVideo, customSrc) {
+    if (!customSrc) throw new Error("请指定标准视频地址");
+    remoteVideo.srcObj = null; // 先清除原视频
+    remoteVideo.src = customSrc;
+    remoteVideo.load();
+    remoteVideo.style.opacity = 1;
+    remoteVideo.width = this.Config.input.videoWidth;
+    remoteVideo.height = this.Config.input.videoHeight;
+  }
+
+  _drawSkeletons(pose, skeletonCtx, poseConf, partConf) {
+    // pose结构: {keypoints: [{position: {x: number, y: number}, score: number},...], score: number}
+    // 绘制人体骨骼
+    if (pose.score < poseConf) return; // 姿态置信度不够，不画
+    const keypoints = pose.keypoints;
+    if (this.Config.output.showSkeletons) {
+      skeletonCtx.beginPath();
+      for (let i = 0; i < this.segCnt; i++) {
+        // 遍历每一段肢体
+        const start = this.seg[i << 1]; // 开始关节
+        const end = this.seg[(i << 1) | 1]; // 结束关节
+        const pointStart = keypoints[start]; // 开始关节坐标
+        const pointEnd = keypoints[end]; // 结束关节坐标
+        if (
+          pointStart.x === null ||
+          pointEnd.x === null ||
+          keypoints[start].score < partConf ||
+          keypoints[end].score < partConf
+        )
+          continue; // 有其中一个关节没有出现或置信度不够，这一段肢体不画
+        skeletonCtx.moveTo(pointStart.x, pointStart.y);
+        skeletonCtx.lineTo(pointEnd.x, pointEnd.y);
+      }
+      skeletonCtx.stroke();
+    }
+    // 绘制关节
+    if (this.Config.output.showPoints) {
+      skeletonCtx.beginPath();
+      for (let i = 0; i < keypoints.length; i++) {
+        const point = keypoints[i];
+        if (
+          (i > 0 && i < 5) ||
+          point.x === null ||
+          keypoints[i].score < partConf
+        ) {
+          continue; // 头部不画左右眼、左右耳，只画鼻子
+        }
+        // 避免圆点之间被填充
+        skeletonCtx.moveTo(point.x, point.y);
+        // 绘制圆点
+        skeletonCtx.arc(point.x, point.y, 16, 0, Math.PI * 2);
+      }
+      skeletonCtx.fill();
+    }
+  }
+
+  _standardize(poses) {
+    // 将PosNet的输出结果统一为MoveNet的输出格式：
+    const after = poses.map((pose) => {
+      return {
+        keypoints: pose.keypoints.map((keypoint) => {
+          return {
+            x: keypoint.position.x,
+            y: keypoint.position.y,
+            score: keypoint.score,
+          };
+        }),
+        score: pose.score,
+      };
     });
-  });
-}
+    return after;
+  }
 
-// 姿态计算
-function detectPoseInRealTime(
-  localCamera,
-  remoteVideo,
-  localSkeletonCanvas,
-  remoteSkeletonCanvas,
-  remotePoseCache = null // 如果有远程视频缓存，则传入。如果没有，则生成缓存
-) {
-  // 模型尚未加载完毕，或者用户摄像头还没准备好，则等待
-  if (
-    guiState.net == null ||
-    chkNotReady(localCamera) ||
-    chkNotReady(remoteVideo)
+  async _singlePoseEstimate(video) {
+    // 单人姿态识别
+    // PosNet:
+    if (this.Config.input.usePoseNet) {
+      return this._standardize(
+        await this.Config.net.estimatePoses(video, {
+          decodingMethod: "single-person",
+        })
+      );
+    } else {
+      // MoveNet:
+      return await this.Config.net.estimatePoses(video);
+    }
+  }
+
+  async _multiPoseEstimate(video) {
+    // 多人姿态识别
+    // PosNet:
+    if (this.Config.input.usePoseNet) {
+      return this._standardize(
+        await this.Config.net.estimatePoses(video, {
+          decodingMethod: "multi-person",
+          maxDetections: this.Config.multiPoseDetection.maxPoseDetections,
+          scoreThreshold: this.Config.multiPoseDetection.minPartConfidence,
+          nmsRadius: this.Config.multiPoseDetection.nmsRadius,
+        })
+      );
+    } else {
+      // MoveNet:（注意，MoveNet不能检测多人，只会返回一个长度的数组）
+      return await this.Config.net.estimatePoses(video, {
+        maxDetections: this.Config.multiPoseDetection.maxPoseDetections,
+        scoreThreshold: this.Config.multiPoseDetection.minPartConfidence,
+        nmsRadius: this.Config.multiPoseDetection.nmsRadius,
+      });
+    }
+  }
+
+  _chkNotReady(video) {
+    return video.readyState !== video.HAVE_ENOUGH_DATA;
+  }
+
+  _flipHorizontal(poses) {
+    // 手动水平翻转(MoveNet没有内置这个功能)
+    poses.forEach((pose) => {
+      pose.keypoints.forEach((keypoint) => {
+        keypoint.x = this.Config.input.videoWidth - keypoint.x; // 至于为何要乘0.75(画框和原视频比例)，暂时不清楚
+        keypoint.y = keypoint.y;
+      });
+    });
+  }
+
+  // 姿态计算
+  _detectPoseInRealTime(
+    remotePoseCache = null, // 如果有远程视频缓存，则传入。如果没有，则生成缓存
+    customPoseCache = null
   ) {
-    if (waiting == 0) {
-      waiting = 1;
-      showModal("模型正在加载，请稍候...", "提示"); // 展示提示框
-    }
-    setTimeout(() => {
-      detectPoseInRealTime(
-        localCamera,
-        remoteVideo,
-        localSkeletonCanvas,
-        remoteSkeletonCanvas,
-        remotePoseCache
-      );
-    }, 1000); // 1s后再次尝试
-    return;
-  }
-  waiting = 0;
-  hideAllModals(); // 关闭所有提示框
-
-  const localSkeletonCtx = localSkeletonCanvas.getContext("2d");
-  const remoteSkeletonCtx = remoteSkeletonCanvas.getContext("2d");
-
-  const progressBar = document.getElementById("progress"); // 进度条
-  const scoreText = document.getElementById("score"); // 评分显示
-  const disp = setInterval(() => {
-    scoreText.textContent = `得分：${poseScoring
-      .averageScore(Date.now())
-      .toFixed(2)}`; // 显示评分
-    if (remoteVideo.paused) scoreText.textContent += " (暂停)"; // 显示暂停状态
-    const progress = remoteVideo.currentTime / remoteVideo.duration;
-    if (!isNaN(progress)) progressBar.value = progress; // 进度条
-    if (remoteVideo.ended || halt || round == -1) endDetect(); // 视频播放结束，结束姿态检测（防止这玩意漏掉了，补丁）
-  }, 1000); // 1s更新一次
-
-  localSkeletonCanvas.width = videoWidth;
-  localSkeletonCanvas.height = videoHeight;
-  remoteSkeletonCanvas.width = videoWidth;
-  remoteSkeletonCanvas.height = videoHeight;
-
-  localSkeletonCtx.strokeStyle = "rgba(0, 0, 0, 0.5)"; // 肢体
-  localSkeletonCtx.lineWidth = 16;
-  localSkeletonCtx.fillStyle = "rgba(238, 130, 238, 0.6)"; // 关节
-  remoteSkeletonCtx.strokeStyle = "rgba(0, 0, 0, 0.5)"; // 肢体
-  remoteSkeletonCtx.lineWidth = 16;
-  remoteSkeletonCtx.fillStyle = "rgba(238, 130, 238, 0.6)"; // 关节
-
-  round = 0; // 标记当前帧数，刚开始的几帧需要特殊处理
-
-  const posesQueueLength = 5; // 队列最大长度
-
-  const poseScoring = new PoseScoring(); // 动作评分模块
-  let remotePoseCaching, remotePoseFromCache;
-  if (remotePoseCache) {
-    remotePoseFromCache = new PoseFromCache(remotePoseCache); // 远程视频姿态数据加载模块
-  } else {
-    remotePoseCaching = new PoseCaching(); // 远程视频姿态数据缓存模块
-  }
-  let localPoseWeighting = null,
-    remotePoseWeighting = null; // 动作加权模块
-  let poseConf, partConf; // 动作置信度阈值
-  switch (
-    guiState.algorithm // 根据配置中的算法运行相应的姿态检测函数
-  ) {
-    case "single-pose":
-      localPoseWeighting = new PoseWeighting(
-        posesQueueLength,
-        guiState.singlePoseDetection.minPartConfidence
-      );
-      remotePoseWeighting = new PoseWeighting(
-        posesQueueLength,
-        guiState.singlePoseDetection.minPartConfidence
-      );
-      poseConf = guiState.singlePoseDetection.minPoseConfidence;
-      partConf = guiState.singlePoseDetection.minPartConfidence;
-      singlePoseDetectionFrame();
-      break;
-    case "multi-pose":
-      localPoseWeighting = new PoseWeighting(
-        posesQueueLength,
-        guiState.multiPoseDetection.minPartConfidence
-      );
-      remotePoseWeighting = new PoseWeighting(
-        posesQueueLength,
-        guiState.multiPoseDetection.minPartConfidence
-      );
-      poseConf = guiState.multiPoseDetection.minPoseConfidence;
-      partConf = guiState.multiPoseDetection.minPartConfidence;
-      multiPoseDetectionFrame();
-      break;
-    default:
-      throw new Error(`Unsupported algorithm: ${guiState.algorithm}`);
-  }
-
-  function endDetect() {
-    clearInterval(disp);
-    // 显示最终平均分
-    let finalScore = poseScoring.totalAverageScore(),
-      remark;
-    if (finalScore > 90) remark = "<br>太强辣！";
-    else if (finalScore > 80) remark = "<br>相当不错！";
-    else remark = "<br>再接再厉！";
-    showModal(
-      "您的分数是：" +
-        finalScore.toFixed(2) +
-        remark +
-        "<br>刷新页面开始新一轮评分。",
-      "评分结束"
-    );
-    poseScoring.clear(); // 清空动作评分
-    localPoseWeighting.clear(); // 清空动作加权
-    remotePoseWeighting.clear(); // 清空动作加权
-    round = -1; // 标志rAF已停止
-    stopPlaying(); // 停止播放
-    if (!remotePoseCache) {
-      console.log(remotePoseCaching.getObj()); // 输出缓存
-    } else {
-      remotePoseFromCache.reset(); // 重置加载的缓存（虽然目前还不会再次使用）
-    }
-  }
-
-  async function singlePoseDetectionFrame() {
-    stats.end();
-    stats.begin();
-    // 如果视频尚未准备好，则不进行检测
-    if (chkNotReady(localCamera) || chkNotReady(remoteVideo)) {
-      requestAnimationFrame(singlePoseDetectionFrame);
-      return;
-    }
-    const localPoses = await singlePoseEstimate(localCamera);
-    let p;
-    if (remotePoseFromCache) {
-      p = remotePoseFromCache.getPoses(remoteVideo.currentTime * 1000); // 从缓存中获取远程视频姿态数据
-    } else {
-      p = await singlePoseEstimate(remoteVideo);
-      remotePoseCaching.addPoses(p); // 缓存远程视频姿态数据
-    }
-    const remotePoses = p;
-
-    if (flipPoseHorizontal) {
-      // 手动水平翻转（因为是前置摄像头，所以需要手动翻转）
-      flipHorizontal(localPoses);
-    }
-
-    if (remotePoses.length > 0 && remotePoses[0].score >= poseConf)
-      poseProcessingFrame(
-        singlePoseDetectionFrame,
-        localPoses[0],
-        remotePoses[0]
-      );
-    else requestAnimationFrame(singlePoseDetectionFrame);
-  }
-
-  async function multiPoseDetectionFrame() {
-    // 该函数未测试
-    stats.end();
-    stats.begin();
-    if (chkNotReady(localCamera) || chkNotReady(remoteVideo)) {
-      requestAnimationFrame(multiPoseDetectionFrame);
-      return;
-    }
-    const localPoses = await multiPoseEstimate(localCamera);
-    let p;
-    if (remotePoseFromCache) {
-      p = remotePoseFromCache.getPoses(remoteVideo.currentTime * 1000); // 从缓存中获取远程视频姿态数据
-    } else {
-      p = await multiPoseEstimate(remoteVideo);
-      remotePoseCaching.addPoses(p); // 缓存远程视频姿态数据
-    }
-    const remotePoses = p;
-
-    if (flipPoseHorizontal) {
-      // 手动水平翻转(是用户相机要翻转，因为是前置)
-      flipHorizontal(localPoses);
-    }
-
-    // 由于需要平滑波动防止偶然的关节消失，因此即便part没有超过阈值，也要传入
-    if (remotePoses.length > 0 && remotePoses[0].score >= poseConf)
-      poseProcessingFrame(
-        multiPoseDetectionFrame,
-        localPoses[0],
-        remotePoses[0]
-      );
-    else requestAnimationFrame(multiPoseDetectionFrame);
-  }
-
-  async function poseProcessingFrame(handle, initLocalPose, initRemotePose) {
-    // 由handle来控制单人还是多人(需要rAF回调)
-    // 平滑
-    localPoseWeighting.addPose(initLocalPose, poseConf); // 记录本地动作
-    remotePoseWeighting.addPose(initRemotePose, poseConf); // 记录标准视频动作
-    const localPose = localPoseWeighting.getPose(); // 平滑后的本地动作
-    const remotePose = remotePoseWeighting.getPose(); // 平滑后的标准视频动作
-    // 画骨架
-    localSkeletonCtx.clearRect(
-      0,
-      0,
-      localSkeletonCanvas.width,
-      localSkeletonCanvas.height
-    );
-    remoteSkeletonCtx.clearRect(
-      0,
-      0,
-      remoteSkeletonCanvas.width,
-      remoteSkeletonCanvas.height
-    );
-    if (localPose)
-      drawSkeletons(localPose, localSkeletonCtx, poseConf, partConf); // 画本地骨骼
-    if (remotePose)
-      drawSkeletons(remotePose, remoteSkeletonCtx, poseConf, partConf);
-    // 画标准视频骨骼
-    else {
-      requestAnimationFrame(handle); // remote中没有检测到人，直接跳过这一帧
-      return;
-    }
-
-    round++;
-    if (round == 1) {
-      localCamera.play();
-      remoteVideo.play(); // 开始播放（因为摄像头一般加载较慢，所以要先加载好摄像头再播放）
-    } else {
-      const transScore = poseScoring.transScore(
-        localPose,
-        remotePose,
-        Date.now(),
-        remoteVideo.paused
-      ); // 记录本地动作
-      // console.log(localPose, remotePose, transScore);
-    }
-    // 如果结束了，清除定时器
-    if (remoteVideo.ended || halt) {
-      endDetect();
-    } else {
-      requestAnimationFrame(handle); // continue looping
-    }
-  }
-}
-
-let displayCache = false;
-function calcCacheInRealTime(remoteVideo) {
-  // 计算远程视频的姿态缓存（本函数使用了requestVideoFrameCallback，目前不能在火狐浏览器中运行）
-  if (!("requestVideoFrameCallback" in HTMLVideoElement.prototype)) {
-    alert("您的浏览器不支持requestVideoFrameCallback");
-    return;
-  }
-  if (guiState.net == null || chkNotReady(remoteVideo)) {
-    if (waiting == 0) {
-      waiting = 1;
-      showModal("模型正在加载，请稍候...", "提示"); // 展示提示框
-    }
-    setTimeout(() => {
-      calcCacheInRealTime(remoteVideo);
-    }, 1000); // 1s后再次尝试
-    return;
-  }
-  displayCache = confirm(
-    "缓存过程是否渲染到屏幕上？（如果设备性能不好，请不要渲染）"
-  );
-  waiting = 0;
-  hideAllModals(); // 关闭所有提示框
-
-  const remoteSkeletonCanvas = document.getElementById("remoteSkeletonCanvas");
-  remoteSkeletonCanvas.width = videoWidth;
-  remoteSkeletonCanvas.height = videoHeight;
-  const remoteSkeletonCtx = remoteSkeletonCanvas.getContext("2d");
-  remoteSkeletonCtx.strokeStyle = "rgba(0, 0, 0, 0.5)"; // 肢体
-  remoteSkeletonCtx.lineWidth = 16;
-  remoteSkeletonCtx.fillStyle = "rgba(238, 130, 238, 0.6)"; // 关节
-
-  round = 0; // rAF轮数
-
-  const remotePoseCaching = new PoseCaching(); // 远程视频姿态数据缓存模块
-
-  const progressBar = document.getElementById("progress"); // 进度条
-  const disp = setInterval(() => {
-    // 缓存时不显示评分
-    const progress = remoteVideo.currentTime / remoteVideo.duration;
-    if (!isNaN(progress)) progressBar.value = progress; // 进度条
-    if (remoteVideo.ended) {
-      endCache();
-    }
-  }, 1000); // 1s更新一次
-
-  // requestVideoframeCallback需要先播放才能被调用（这一点和rAF不同！）所以一开始必须手动调用
-  switch (guiState.algorithm) {
-    case "single-pose":
-      singlePoseCacheFrame(0, {});
-      break;
-    case "multi-pose":
-      multiPoseCacheFrame(0, {});
-      break;
-    default:
-      throw new Error(`Unsupported algorithm: ${guiState.algorithm}`);
-  }
-  remoteVideo.play();
-
-  function endCache() {
-    clearInterval(disp);
-    console.log(remotePoseCaching.getObj()); // 输出缓存
-    showModal("缓存完成，请前往控制台查看。", "缓存完成");
-  }
-
-  async function singlePoseCacheFrame(now, metadata) {
-    stats.end();
-    stats.begin();
-    if (chkNotReady(remoteVideo)) {
-      // 视频没准备好，或缓存迅速而视频帧率较低，则跳过
+    const localCamera = this.localCamera;
+    const remoteVideo = this.remoteVideo;
+    // 模型尚未加载完毕，或者用户摄像头还没准备好，则等待
+    if (
+      this.Config.net == null ||
+      this._chkNotReady(localCamera) ||
+      this._chkNotReady(remoteVideo)
+    ) {
+      if (this.waiting == 0) {
+        this.waiting = 1;
+      }
       setTimeout(() => {
-        singlePoseCacheFrame(now, metadata);
-      }, 100);
+        this._detectPoseInRealTime(remotePoseCache, customPoseCache);
+      }, 1000); // 1s后再次尝试
       return;
     }
-    const poses = await singlePoseEstimate(remoteVideo);
-    remotePoseCaching.addPoses(poses); // 缓存远程视频姿态数据
+    const endDetect = () => {
+      // 显示最终平均分
+      this.finalScore = this.poseScoring.totalAverageScore();
 
-    // 开始播放（因为摄像头一般加载较慢，所以要先加载好摄像头再播放）
-    if (round == 0) {
-      remoteVideo.play();
-    }
-    round++;
-    if (remoteVideo.ended) endCache(); // 视频播放结束，结束姿态检测
-    else remoteVideo.requestVideoFrameCallback(singlePoseCacheFrame); // 最后一帧不会被调用，不能在这里检测ended（额，这是bug吧？）
-  }
+      this.poseScoring.clear(); // 清空动作评分
+      localPoseWeighting.clear(); // 清空动作加权
+      remotePoseWeighting.clear(); // 清空动作加权
+      this.round = -1; // 标志rAF已停止
+      this.stopPlaying();
+      if (!remotePoseCache) {
+        this.finalRemoteCache = remotePoseCaching.getObj(); // 输出缓存
+      } else {
+        remotePoseFromCache.reset(); // 重置加载的缓存（虽然目前还不会再次使用）
+      }
+    };
 
-  async function multiPoseCacheFrame(now, metadata) {
-    // 该函数未测试
-    stats.end();
-    stats.begin();
-    if (chkNotReady(remoteVideo)) {
-      setTimeout(() => {
-        multiPoseCacheFrame(now, metadata);
-      }, 100);
-      return;
-    }
-    const poses = await multiPoseEstimate(remoteVideo);
-    remotePoseCaching.addPoses(poses); // 缓存远程视频姿态数据
+    const singlePoseDetectionFrame = async () => {
+      if (this.Config.output.stats !== null) {
+        this.Config.output.stats.end();
+        this.Config.output.stats.begin();
+      }
+      // 如果视频尚未准备好，则不进行检测
+      if (this._chkNotReady(localCamera) || this._chkNotReady(remoteVideo)) {
+        requestAnimationFrame(singlePoseDetectionFrame);
+        return;
+      }
+      const localPoses = await this._singlePoseEstimate(localCamera);
+      let p;
+      if (remotePoseFromCache) {
+        p = remotePoseFromCache.getPoses(remoteVideo.currentTime * 1000); // 从缓存中获取远程视频姿态数据
+      } else {
+        p = await this._singlePoseEstimate(remoteVideo);
+        remotePoseCaching.addPoses(p); // 缓存远程视频姿态数据
+      }
+      const remotePoses = p;
 
-    if (displayCache) {
-      console.log(poses);
+      if (this.Config.output.flipPoseHorizontal) {
+        // 手动水平翻转（因为是前置摄像头，所以需要手动翻转）
+        this._flipHorizontal(localPoses);
+      }
+
+      if (remotePoses.length > 0 && remotePoses[0].score >= poseConf)
+        poseProcessingFrame(
+          singlePoseDetectionFrame,
+          localPoses[0],
+          remotePoses[0]
+        );
+      else requestAnimationFrame(singlePoseDetectionFrame);
+    };
+
+    const multiPoseDetectionFrame = async () => {
+      if (this.Config.output.stats !== null) {
+        this.Config.output.stats.end();
+        this.Config.output.stats.begin();
+      }
+      if (this._chkNotReady(localCamera) || this._chkNotReady(remoteVideo)) {
+        requestAnimationFrame(multiPoseDetectionFrame);
+        return;
+      }
+      const localPoses = await this._multiPoseEstimate(localCamera);
+      let p;
+      if (remotePoseFromCache) {
+        p = remotePoseFromCache.getPoses(remoteVideo.currentTime * 1000); // 从缓存中获取远程视频姿态数据
+      } else {
+        p = await this._multiPoseEstimate(remoteVideo);
+        remotePoseCaching.addPoses(p); // 缓存远程视频姿态数据
+      }
+      const remotePoses = p;
+
+      if (this.Config.output.flipPoseHorizontal) {
+        // 手动水平翻转(是用户相机要翻转，因为是前置)
+        this._flipHorizontal(localPoses);
+      }
+
+      // 由于需要平滑波动防止偶然的关节消失，因此即便part没有超过阈值，也要传入
+      if (remotePoses.length > 0 && remotePoses[0].score >= poseConf)
+        poseProcessingFrame(
+          multiPoseDetectionFrame,
+          localPoses[0],
+          remotePoses[0]
+        );
+      else requestAnimationFrame(multiPoseDetectionFrame);
+    };
+
+    const poseProcessingFrame = async (
+      handle,
+      initLocalPose,
+      initRemotePose
+    ) => {
+      // 由handle来控制单人还是多人(需要rAF回调)
+      // 平滑
+      localPoseWeighting.addPose(initLocalPose, poseConf); // 记录本地动作
+      remotePoseWeighting.addPose(initRemotePose, poseConf); // 记录标准视频动作
+      const localPose = localPoseWeighting.getPose(); // 平滑后的本地动作
+      const remotePose = remotePoseWeighting.getPose(); // 平滑后的标准视频动作
+      // 画骨架
+      localSkeletonCtx.clearRect(
+        0,
+        0,
+        localSkeletonCanvas.width,
+        localSkeletonCanvas.height
+      );
       remoteSkeletonCtx.clearRect(
         0,
         0,
         remoteSkeletonCanvas.width,
         remoteSkeletonCanvas.height
       );
-      for (const pose of poses)
-        drawSkeletons(
-          pose,
-          remoteSkeletonCtx,
-          guiState.multiPoseDetection.minPoseConfidence,
-          guiState.multiPoseDetection.minPartConfidence
+      if (localPose)
+        this._drawSkeletons(localPose, localSkeletonCtx, poseConf, partConf); // 画本地骨骼
+      if (remotePose)
+        this._drawSkeletons(remotePose, remoteSkeletonCtx, poseConf, partConf);
+      // 画标准视频骨骼
+      else {
+        requestAnimationFrame(handle); // remote中没有检测到人，直接跳过这一帧
+        return;
+      }
+
+      this.round++;
+      if (this.round == 1) {
+        localCamera.play();
+        remoteVideo.play(); // 开始播放（因为摄像头一般加载较慢，所以要先加载好摄像头再播放）
+      } else {
+        const scoreInfo = this.poseScoring.transScore(
+          localPose,
+          remotePose,
+          Date.now(),
+          remoteVideo.paused
+        ); // 记录本地动作
+        this.tip = scoreInfo.tip; // 记录提示信息
+        // console.log(localPose, remotePose, scoreInfo);
+      }
+      // 如果结束了，清除定时器
+      if (remoteVideo.ended || this.halt) {
+        endDetect();
+      } else {
+        requestAnimationFrame(handle); // continue looping
+      }
+    };
+    // 由于浏览器的视频播放到最后一帧可能不会调用rAF回调函数，因此要多加一个计时器检测并调用endDetect
+    const disp = setInterval(() => {
+      if (this.round > -1 && (remoteVideo.ended || this.halt)) {
+        endDetect();
+        clearInterval(disp);
+      }
+    }, 1000);
+
+    const localSkeletonCanvas = this.localCanvas;
+    const remoteSkeletonCanvas = this.remoteCanvas;
+    this.waiting = 0;
+
+    const localSkeletonCtx = localSkeletonCanvas.getContext("2d");
+    const remoteSkeletonCtx = remoteSkeletonCanvas.getContext("2d");
+
+    localSkeletonCanvas.width = this.Config.input.videoWidth;
+    localSkeletonCanvas.height = this.Config.input.videoHeight;
+    remoteSkeletonCanvas.width = this.Config.input.videoWidth;
+    remoteSkeletonCanvas.height = this.Config.input.videoHeight;
+
+    localSkeletonCtx.strokeStyle = "rgba(0, 0, 0, 0.5)"; // 肢体
+    localSkeletonCtx.lineWidth = 16;
+    localSkeletonCtx.fillStyle = "rgba(238, 130, 238, 0.6)"; // 关节
+    remoteSkeletonCtx.strokeStyle = "rgba(0, 0, 0, 0.5)"; // 肢体
+    remoteSkeletonCtx.lineWidth = 16;
+    remoteSkeletonCtx.fillStyle = "rgba(238, 130, 238, 0.6)"; // 关节
+
+    this.round = 0; // 标记当前帧数，刚开始的几帧需要特殊处理
+
+    let remotePoseCaching, remotePoseFromCache;
+    if (remotePoseCache) {
+      remotePoseFromCache = new PoseFromCache(remotePoseCache); // 远程视频姿态数据加载模块
+    } else {
+      remotePoseCaching = new PoseCaching(); // 远程视频姿态数据缓存模块
+    }
+    let localPoseWeighting = null,
+      remotePoseWeighting = null; // 动作加权模块
+    let poseConf, partConf; // 动作置信度阈值
+    switch (
+      this.Config.algorithm // 根据配置中的算法运行相应的姿态检测函数
+    ) {
+      case "single-pose":
+        localPoseWeighting = new PoseWeighting(
+          this.Config.output.posesQueueLength,
+          this.Config.singlePoseDetection.minPartConfidence
         );
+        remotePoseWeighting = new PoseWeighting(
+          this.Config.output.posesQueueLength,
+          this.Config.singlePoseDetection.minPartConfidence
+        );
+        poseConf = this.Config.singlePoseDetection.minPoseConfidence;
+        partConf = this.Config.singlePoseDetection.minPartConfidence;
+        singlePoseDetectionFrame();
+        break;
+      case "multi-pose":
+        localPoseWeighting = new PoseWeighting(
+          this.Config.output.posesQueueLength,
+          this.Config.multiPoseDetection.minPartConfidence
+        );
+        remotePoseWeighting = new PoseWeighting(
+          this.Config.output.posesQueueLength,
+          this.Config.multiPoseDetection.minPartConfidence
+        );
+        poseConf = this.Config.multiPoseDetection.minPoseConfidence;
+        partConf = this.Config.multiPoseDetection.minPartConfidence;
+        multiPoseDetectionFrame();
+        break;
+      default:
+        throw new Error(`Unsupported algorithm: ${this.Config.algorithm}`);
+    }
+  }
+  _calcCacheInRealTime(remoteVideo) {
+    // 计算远程视频的姿态缓存（本函数使用了requestVideoFrameCallback，目前不能在火狐浏览器中运行）
+    if (!("requestVideoFrameCallback" in HTMLVideoElement.prototype)) {
+      alert("您的浏览器不支持requestVideoFrameCallback");
+      return;
+    }
+    if (this.Config.net == null || this._chkNotReady(remoteVideo)) {
+      if (this.waiting == 0) {
+        this.waiting = 1;
+      }
+      setTimeout(() => {
+        this._calcCacheInRealTime(remoteVideo);
+      }, 1000); // 1s后再次尝试
+      return;
     }
 
-    // 开始播放（因为摄像头一般加载较慢，所以要先加载好摄像头再播放）
-    if (round == 0) {
-      remoteVideo.play();
+    const endCache = () => {
+      clearInterval(disp);
+      this.round = -1; // 标志rAF已停止
+      this.stopPlaying();
+      this.finalRemoteCache = remotePoseCaching.getObj(); // 输出缓存
+    };
+
+    const singlePoseCacheFrame = async (now, metadata) => {
+      if (this.Config.output.stats !== null) {
+        this.Config.output.stats.end();
+        this.Config.output.stats.begin();
+      }
+      if (this._chkNotReady(remoteVideo)) {
+        // 视频没准备好，或缓存迅速而视频帧率较低，则跳过
+        setTimeout(() => {
+          singlePoseCacheFrame(now, metadata);
+        }, 100);
+        return;
+      }
+      const poses = await this._singlePoseEstimate(remoteVideo);
+      remotePoseCaching.addPoses(poses); // 缓存远程视频姿态数据
+
+      if (this.Config.output.displayCacheSkeleton) {
+        console.log(poses);
+        remoteSkeletonCtx.clearRect(
+          0,
+          0,
+          remoteSkeletonCanvas.width,
+          remoteSkeletonCanvas.height
+        );
+        for (const pose of poses) // 因为是single，所以只有一个
+          this._drawSkeletons(
+            pose,
+            remoteSkeletonCtx,
+            this.Config.multiPoseDetection.minPoseConfidence,
+            this.Config.multiPoseDetection.minPartConfidence
+          );
+      }
+
+      // 开始播放（因为摄像头一般加载较慢，所以要先加载好摄像头再播放）
+      if (this.round == 0) {
+        remoteVideo.play();
+      }
+      this.round++;
+      if (remoteVideo.ended) endCache(); // 视频播放结束，结束姿态检测
+      else remoteVideo.requestVideoFrameCallback(singlePoseCacheFrame); // 最后一帧不会被调用，不能在这里检测ended（额，这是bug吧？）
+    };
+
+    const multiPoseCacheFrame = async (now, metadata) => {
+      if (this.Config.output.stats !== null) {
+        this.Config.output.stats.end();
+        this.Config.output.stats.begin();
+      }
+      if (this._chkNotReady(remoteVideo)) {
+        setTimeout(() => {
+          multiPoseCacheFrame(now, metadata);
+        }, 100);
+        return;
+      }
+      const poses = await this._multiPoseEstimate(remoteVideo);
+      remotePoseCaching.addPoses(poses); // 缓存远程视频姿态数据
+
+      if (this.Config.output.displayCacheSkeleton) {
+        console.log(poses);
+        remoteSkeletonCtx.clearRect(
+          0,
+          0,
+          remoteSkeletonCanvas.width,
+          remoteSkeletonCanvas.height
+        );
+        for (const pose of poses)
+          this._drawSkeletons(
+            pose,
+            remoteSkeletonCtx,
+            this.Config.multiPoseDetection.minPoseConfidence,
+            this.Config.multiPoseDetection.minPartConfidence
+          );
+      }
+
+      // 开始播放（因为摄像头一般加载较慢，所以要先加载好摄像头再播放）
+      this.round++;
+      if (this.round == 1) {
+        remoteVideo.play();
+      }
+      if (remoteVideo.ended || this.halt)
+        endCache(); // 视频播放结束，结束姿态检测
+      else remoteVideo.requestVideoFrameCallback(multiPoseCacheFrame); // 最后一帧不会被调用，不能在这里检测ended（额，这是bug吧？）
+    };
+    // 由于浏览器的视频播放到最后一帧可能不会调用rAF回调函数，因此要多加一个计时器检测并调用endCache
+    const disp = setInterval(() => {
+      if (this.round > -1 && (remoteVideo.ended || this.halt)) endCache();
+    }, 1000);
+
+    this.waiting = 0;
+
+    const remoteSkeletonCanvas = this.remoteCanvas;
+    remoteSkeletonCanvas.width = this.Config.input.videoWidth;
+    remoteSkeletonCanvas.height = this.Config.input.videoHeight;
+    const remoteSkeletonCtx = remoteSkeletonCanvas.getContext("2d");
+    remoteSkeletonCtx.strokeStyle = "rgba(0, 0, 0, 0.5)"; // 肢体
+    remoteSkeletonCtx.lineWidth = 16;
+    remoteSkeletonCtx.fillStyle = "rgba(238, 130, 238, 0.6)"; // 关节
+
+    this.round = 0; // rAF轮数
+
+    const remotePoseCaching = new PoseCaching(); // 远程视频姿态数据缓存模块
+
+    // requestVideoframeCallback需要先播放才能被调用（这一点和rAF不同！）所以一开始必须手动调用
+    switch (this.Config.algorithm) {
+      case "single-pose":
+        singlePoseCacheFrame(0, {});
+        break;
+      case "multi-pose":
+        multiPoseCacheFrame(0, {});
+        break;
+      default:
+        throw new Error(`Unsupported algorithm: ${this.Config.algorithm}`);
     }
-    round++;
-    if (remoteVideo.ended) endCache(); // 视频播放结束，结束姿态检测
-    else remoteVideo.requestVideoFrameCallback(multiPoseCacheFrame); // 最后一帧不会被调用，不能在这里检测ended（额，这是bug吧？）
+    remoteVideo.play();
   }
 }
-
 class PoseWeighting {
   // 给姿态加权重+前缀和平移窗口，用于平滑位置的抖动
   constructor(windowSize, minPartConfidence) {
@@ -915,10 +1061,16 @@ class PoseWeighting {
   }
 }
 
-const ALPHA = 32768;
-const GAMMA = 3;
-
+const ALPHA = 16384; // 误差衰减因子，越小越严格
+const GAMMA = 3; // 距离倍增幂，越大越严格
+// 1048576 4 // 非常严厉，分数两极分化
+// 16384 3 // 一般70-80，做得好会有90，做不好大概20-50
 const DEFAULT_PENALTY = ALPHA * 50;
+const CLOSE_TOLERANCE = 1.6; // 靠太近的视角差距（用户和标准视频的身高比例）容忍百分比
+const FAR_TOLERANCE = 0.8; // 远离的
+const CONS_BADPOSE = 10; // 姿势差太多的连续帧数后提示用户
+const SCORE_BADPOSE = 4; // 姿势差太多的分数阈值上限
+const CONS_FAILED = 3; // 用户有关节消失的连续帧数后提示用户
 
 class PoseScoring {
   // 动作评分模块，用于评估两个动作的相近程度，也就是用户动作和标准动作相比然后评分
@@ -928,6 +1080,8 @@ class PoseScoring {
     this.scoreCnt = 0; // 历史动作计数
     this.errorPenalty = errorPenalty; // 如果remotePosition出现了的部分，localPosition没有出现，则分数减少一个常量
     this.previousTimeIndex = 0; // 上一次前一秒查询平均分对应的索引
+    this.failedCnt = 0; // 用户有关节消失的连续帧数（超过CONS_FAILED帧后提示用户）
+    this.badPoseCnt = 0; // 姿势差太多的连续帧数（超过CONS_BADPOSE帧后提示用户）
   }
 
   transScore(localPose, remotePose, currentTime, videoPaused) {
@@ -942,19 +1096,31 @@ class PoseScoring {
     }
     const localKeypoints = localPose.keypoints;
     const remoteKeypoints = remotePose.keypoints;
+    let hasDisappearedJoint = false; // 用户有关节消失的标志
     let errorX = {},
-      errorY = {},
+      errorY = {}, // 记录每个关节相对标准动作的误差
       minErrorX = Infinity,
-      minErrorY = Infinity;
+      minErrorY = Infinity, // 用于消除统一偏移
+      minY = Infinity,
+      maxY = -Infinity,
+      standardminY = Infinity,
+      standardmaxY = -Infinity; // 检测用户的高度，提示用户靠近或远离摄像头（要和标准视频高度一致才能更好评分）
     for (let i = 0; i < localKeypoints.length; i++) {
       const localPoint = localKeypoints[i];
       const remotePoint = remoteKeypoints[i];
       // 如果remotePosition出现了的部分，localPosition没有出现，则分数减少一个常量
       if (!localPoint || !localPoint.x) {
-        if (remotePoint)
-          (errorX[i] = this.errorPenalty), (errorY[i] = this.errorPenalty);
+        if (remotePoint) {
+          errorX[i] = this.errorPenalty;
+          errorY[i] = this.errorPenalty;
+          hasDisappearedJoint = true;
+        }
         continue;
       }
+      minY = Math.min(minY, localPoint.y);
+      maxY = Math.max(maxY, localPoint.y);
+      standardminY = Math.min(standardminY, remotePoint.y);
+      standardmaxY = Math.max(standardmaxY, remotePoint.y);
       errorX[i] = localPoint.x - remotePoint.x;
       errorY[i] = localPoint.y - remotePoint.y;
       if (Math.abs(errorX[i]) < minErrorX) minErrorX = errorX[i]; // 消除统一偏移，使用最小的量
@@ -967,6 +1133,29 @@ class PoseScoring {
         Math.abs(errorY[i] - minErrorY) ** GAMMA; // 计算曼哈顿距离之和
     }
     const score = Math.max(100 - error / ALPHA / localKeypoints.length, 1); // 归一化到1-100
+    // 提醒用户全身入镜
+    let tip = 0;
+    if (score < SCORE_BADPOSE) this.badPoseCnt++;
+    else this.badPoseCnt = 0;
+    if (hasDisappearedJoint) {
+      this.failedCnt++;
+      if (this.failedCnt >= CONS_FAILED) {
+        tip = 3; // 提醒用户全身入镜
+      }
+    } else {
+      this.failedCnt = 0;
+      // 提醒用户靠近或远离摄像头
+      const heightDiff = (maxY - minY) / (standardmaxY - standardminY);
+      if (heightDiff < FAR_TOLERANCE) {
+        tip = 2; // 提醒用户靠近摄像头
+      } else if (heightDiff > CLOSE_TOLERANCE) {
+        tip = 1; // 提醒用户远离摄像头
+      } else if (this.badPoseCnt >= CONS_BADPOSE) {
+        tip = 4; // 提醒用户姿势差
+      } else {
+        tip = 0; // 清除提示
+      }
+    }
     if (videoPaused) return score; // 暂停时评分但是不计入总分
     // 处理分数前缀和
     if (this.scoreCnt == 0) {
@@ -976,7 +1165,10 @@ class PoseScoring {
     }
     this.scoreTime.push(currentTime);
     this.scoreCnt++;
-    return score;
+    return {
+      score: score,
+      tip: tip,
+    };
   }
 
   averageScore(currentTime) {
