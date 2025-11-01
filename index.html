@@ -2,14 +2,19 @@
 <html>
   <head>
     <title>迳口麒麟舞AI传承大师</title>
+    <meta charset="utf-8">
     <link rel="stylesheet" href="static/css/index.css" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta http-equiv="Cache-Control" content="no-transform " />
+    <meta http-equiv="Cache-Control" content="no-siteapp" />
+    <meta name="renderer" content="webkit">
+    <script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js"></script>
+    <script>LA.init({id:"3LTNMctPRNmiv7MN",ck:"3LTNMctPRNmiv7MN"})</script>
   </head>
 
   <body
     style="
-      background-image: url('static/img/background.png');
-      background-repeat: no-repeat;
+      background: url('static/img/background.png') no-repeat center center fixed;
       background-size: cover;
     "
     data-debug="false"
@@ -320,7 +325,7 @@
         1: "🔥请远离摄像头，确保全身入镜🔥",
         2: "❄️请靠近摄像头❄️",
         3: "🌟请全身入镜🌟",
-        4: "姿势差太多啦",
+        4: "",
       };
 
       let waitTextShowed = false;
@@ -335,8 +340,10 @@
           hideAllModals();
           waitTextShowed = false;
         }
-        scoreText.textContent = `得分：${status.score.toFixed(2)}`; // 显示评分
-        if (status.paused) scoreText.textContent += " (暂停)"; // 显示暂停状态
+        if (status.paused) scoreText.textContent = ` 得分：${status.transScore.toFixed(2)}(暂停)`; // 显示暂停状态
+        else {
+          scoreText.textContent = `得分：${status.score.toFixed(2)}`;
+        }
         if (status.finalScore) {
           showFinalScore(status.finalScore); // 显示最终得分
         } else {

@@ -98,6 +98,7 @@ export class ActionCamera {
     this.round = -1; // 标记当前rAF轮数，刚开始的一轮需要特殊处理（-1未开始或已结束，0准备中）
     this.waiting = 0; // 标记等待模型加载完毕的提示框是否已经显示
     this.tip = 0; // 提示用户的站立位置（远离、靠近、调整摄像头）
+    this.prevTransScore = 0; // 记录上一帧的评分（用于在暂停时预览）
 
     this.seg = [
       // 关节连接关系，两两链接
@@ -319,6 +320,7 @@ export class ActionCamera {
     // 获取当前运行状态（在开始后定时调用，以获取最新分数）
     const result = {
       score: this.poseScoring.averageScore(Date.now()), // 最新1s内分数
+      transScore: this.prevTransScore, // 上一个瞬时帧率分数
       tip: this.tip, // 提示用户的站立位置（远离、靠近、调整摄像头）
       paused: this.remoteVideo.paused && this.enabled_1, // 是否暂停播放（姿态解算不暂停，可用于调整模仿）
       currentTime: this.remoteVideo.currentTime, // 当前视频播放位置
@@ -757,13 +759,13 @@ export class ActionCamera {
         localCamera.play();
         remoteVideo.play(); // 开始播放（因为摄像头一般加载较慢，所以要先加载好摄像头再播放）
       } else {
-        const scoreInfo = this.poseScoring.transScore(
+        this.prevTransScore = this.poseScoring.transScore(
           localPose,
           remotePose,
           Date.now(),
           remoteVideo.paused
         ); // 记录本地动作
-        this.tip = scoreInfo.tip; // 记录提示信息
+        this.tip = this.prevTransScore.tip; // 记录提示信息
         // console.log(localPose, remotePose, scoreInfo);
       }
       // 如果结束了，清除定时器
@@ -1061,13 +1063,13 @@ class PoseWeighting {
   }
 }
 
-const ALPHA = 16384; // 误差衰减因子，越小越严格
+const ALPHA = 65536; // 误差衰减因子，越小越严格
 const GAMMA = 3; // 距离倍增幂，越大越严格
 // 1048576 4 // 非常严厉，分数两极分化
 // 16384 3 // 一般70-80，做得好会有90，做不好大概20-50
 const DEFAULT_PENALTY = ALPHA * 50;
 const CLOSE_TOLERANCE = 1.6; // 靠太近的视角差距（用户和标准视频的身高比例）容忍百分比
-const FAR_TOLERANCE = 0.8; // 远离的
+const FAR_TOLERANCE = 0.7; // 远离的
 const CONS_BADPOSE = 10; // 姿势差太多的连续帧数后提示用户
 const SCORE_BADPOSE = 4; // 姿势差太多的分数阈值上限
 const CONS_FAILED = 3; // 用户有关节消失的连续帧数后提示用户

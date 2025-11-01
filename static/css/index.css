@@ -38,7 +38,7 @@ body {
   align-items: center;
   justify-content: center;
   position: relative;
-  top: 14rem;
+  top: 15rem;
   flex-direction: column;
 }
 .fpsbox {
@@ -112,12 +112,14 @@ input:focus {
   gap: 30px;
   display: flex;
 }
-.score,
-.tip {
+.tip{
   text-align: center;
-  font-size: 2rem;
+  font-size: 30px;
+}
+.score{
+  text-align: center;
+  font-size: 45px;
   font-weight: bold;
-  color: var(--black);
 }
 .round {
   /*圆角进度条外壳*/
