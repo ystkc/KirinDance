@@ -5,19 +5,26 @@
 
 ### 使用方式
 
-1. 将要学习的麒麟舞视频放在根目录/video 文件夹下
-2. 安装 python==3.11.0
-3. 可运行 **`pip install -r requirements.txt`**来配置环境。若您是开发者，建议使用 **`pipenv install`**
-   (若没有 Pipfile，可使用 **`pipenv install -r requirements.txt`**)
-4. 运行主程序 app.py
+1. 将要学习的麒麟舞视频放在根目录 /static 文件夹下，命名为 std_fixed.mp4
+2. 安装ruby 3.3.3(可以通过命令`ruby -v`检查版本)，然后运行`gem install bundler`，然后在项目根目录运行`bundle install`
+3. 运行launch.bat，会自动打开浏览器
+4. 若脚本运行出现错误，可以在项目根目录下使用终端运行 **`bundle exec jekyll serve --disable-disk-cache --incremental --port 8860`** 初次运行大约需要5分钟，等待出现终端出现消息：`Server running... press ctrl-c to stop.` 后在本电脑使用浏览器访问 **`localhost:8860/KirinDance`**
 
 ---
 
-### ActionCamera 类封装接口
+> 下面的内容适合开发者食用
 
-使用方法：先实例化 ActionCamera 类，然后调用 startPlaying 方法，传入标准视频 url 和用户视频 url（可选），加载完成后会自动开始播放并评分。调用 startPlaying 后可以定时调用 getStatus 方法获取当前状态和分数。调用 stopPlaying 方法停止播放。
+---
+
+### 核心模块 ActionCamera 封装接口文档
+
+**作用** ：给定用户的摄像头和标准图像流，对两者进行的动作进行实时比对和评分，并将图像和骨架渲染到给定的画布上。
+
+**使用方法** ：先实例化 ActionCamera 类，指定要绑定到的图像流元素和画布元素，然后调用 startPlaying 方法，传入标准视频 url 和用户视频 url（可指定为url或摄像头），加载完成后会自动开始播放并评分。调用 startPlaying 后可以定时调用 getStatus 方法获取当前状态和分数。调用 stopPlaying 方法停止播放。
 
 为了改善体验，可以先调用 startCaching 方法缓存标准视频姿态数据，然后将缓存载入程序中传入 startPlaying 方法播放用户视频，这样可以减少计算，改善用户体验。
+
+**API文档**：
 
 > constructor(remoteVideo, localCamera, remoteCanvas, localCanvas, config=null)
 
@@ -153,6 +160,10 @@ standardSrc: 标准视频url
 > async stopPlaying()
 
 停止播放，释放资源。如果是缓存模式，已计算的缓存会被丢弃
+
+---
+
+> 后面的内容纯烤谷，可以不用看了
 
 ---
 
