@@ -1,145 +1,320 @@
+
+
 body {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-.footer-text {
-  max-width: 600px;
-  text-align: center;
-}
-#loading {
-  font-size: 2rem;
-  background-color: #fff;
-  border-radius: 1rem;
-  z-index: 10;
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  opacity: 1;
 }
 
-@media only screen and (max-width: 600px) {
-  .footer-text,
-  .dg {
-    display: none;
+#main-container {
+  position: absolute;
+  left: 349px;
+  top: 247px;
+  width: 1250px;
+  height: 575px;
+  opacity: 1;
+}
+
+.right-canvas {
+  position: absolute;
+  left: 666px;
+  top: 71px;
+  width: 562px;
+  height: 433px;
+  border-radius: 40px;
+  opacity: 1;
+    
+}
+
+.left-canvas {
+  position: absolute;
+  left: 24.55px;
+  top: 71px;
+  width: 562px;
+  height: 433px;
+  border-radius: 40px;
+  opacity: 1;
+}
+
+#left-frame {
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  width: 608.55px;
+  height: 575px;
+  opacity: 1;
+    
+  background: url(../img/canvas-frame.png);
+}
+#right-frame {
+  position: absolute;
+  left: 641.45px;
+  top: 0px;
+  width: 608.55px;
+  height: 575px;
+  opacity: 1;
+    
+  background: url(../img/canvas-frame.png);
+}
+
+.footer {
+  position: absolute;
+  left: 449px;
+  top: 906px;
+  width: 1067px;
+  height: 76.63px;
+  opacity: 1;
+}
+.sub-footer {
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  width: 1067px;
+  height: 76.63px;
+  opacity: 1;
+}
+
+
+/* 按钮效果开始 */ 
+.btn {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 18px 36px;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border-radius: 12px;
+  cursor: pointer;
+  /* box-shadow: 0 6px 20px rgba(106, 17, 203, 0.3); */
+  user-select: none;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  border: none;
+  outline: none;
+  position: relative;
+  overflow: hidden;
+}
+
+/* 悬停效果 - 变大 */
+.btn:hover {
+  transform: scale(1.05);
+  /* box-shadow: 0 10px 25px rgba(106, 17, 203, 0.4); */
+}
+
+/* 点击效果 - 变小 */
+.btn:active {
+  transform: scale(0.94);
+  /* box-shadow: 0 4px 10px rgba(106, 17, 203, 0.2); */
+  transition-duration: 0.1s;
+}
+
+/* 焦点状态（键盘导航） */
+.btn:focus-visible {
+  outline: 3px solid #6a11cb;
+  outline-offset: 4px;
+}
+
+/* 添加波纹效果 */
+.btn::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  background: rgba(255, 255, 255, 0.5);
+  opacity: 0;
+  border-radius: 100%;
+  transform: scale(1, 1) translate(-50%);
+  transform-origin: 50% 50%;
+}
+
+.btn:active::after {
+  animation: ripple 0.6s ease-out;
+}
+
+@keyframes ripple {
+  0% {
+      transform: scale(0, 0);
+      opacity: 0.5;
+  }
+  100% {
+      transform: scale(20, 20);
+      opacity: 0;
   }
 }
-.modal {
-  transition: opacity 0.5s;
-  background: rgba(0, 0, 0, 0.5);
+/* 按钮效果结束 */ 
+
+#start-btn-text {
+  width: 72px;
+  height: 44px;
+  opacity: 1;
+    
+  font-family: Alimama DongFangDaKai;
+  font-size: 36px;
+  font-weight: normal;
+  line-height: normal;
+  letter-spacing: 0em;
+    
+  font-variation-settings: "opsz" auto;
+  font-feature-settings: "kern" on;
+  color: #3D3D3D;
+}	
+
+#start {
+  position: absolute;
+  left: 0px;
+  top: 0px;
+  width: 180px;
+  height: 76.63px;
+  opacity: 1;
+    
+  background: url(../img/btn-frame.png) no-repeat center center;
+	background-size: cover;
 }
 
-.btn-group {
-  flex-basis: 100%;
-  display: flex;
-  flex-direction: row;
-  justify-content: space-evenly;
-  padding: 0.5rem;
-  overflow: hidden;
-}
-.main {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: relative;
-  top: 15rem;
-  flex-direction: column;
-}
-.fpsbox {
-  /*左下角*/
+#background-div {
   position: absolute;
-  bottom: 24px;
-  left: 0;
-  width: 100%;
+  left: 0px;
+  top: 0px;
+  width: 1920px;
+  height: 1080px;
+  opacity: 1;
+    
+  background: url(../img/background.png) no-repeat center center;
+	background-size: cover;
 }
-.btn {
-  width: 12rem;
-  height: 3rem;
-  background: white;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  white-space: nowrap;
-  cursor: pointer;
-  padding: 0.3rem 0.5rem 0.5rem 0.3rem;
-  box-shadow: inset -0.4rem -0.4rem 0.1rem 0 rgba(0, 0, 0, 0.2);
-  border: solid 0.1rem var(--black);
-  border-radius: 0.8rem;
-  user-select: none;
-  transition: all 0.2s ease;
+
+#pause-btn-text {
+  width: 72px;
+  height: 44px;
+  opacity: 1;
+    
+  font-family: Alimama DongFangDaKai;
+  font-size: 36px;
+  font-weight: normal;
+  line-height: normal;
+  letter-spacing: 0em;
+    
+  font-variation-settings: "opsz" auto;
+  font-feature-settings: "kern" on;
+  color: #3D3D3D;
 }
-.btn:focus,
-input:focus {
-  box-shadow: none !important;
-}
-.btn:active,
-.btn.active {
-  padding: 0.5rem 0.3rem 0.3rem 0.5rem;
-  box-shadow: inset 0.4rem 0.4rem 0.1rem 0 rgba(0, 0, 0, 0.2);
-}
-.canvas-container {
-  margin-left: 2rem;
-  margin-right: 2rem;
-  position: relative;
-  width: 540px;
-  height: 405px;
-}
-.canvas-container video {
-  width: 540px;
-  height: 405px;
-}
-.canvas-container.flip video {
-  -moz-transform: scaleX(-1);
-  -o-transform: scaleX(-1);
-  -webkit-transform: scaleX(-1);
-  transform: scaleX(-1);
-}
-.canvas-container canvas {
+
+
+#pause {
   position: absolute;
-  top: 0;
-  left: 0;
-  width: 540px;
-  height: 405px;
-  user-select: none;
+  left: 276px;
+  top: 0px;
+  width: 180px;
+  height: 76.63px;
+  opacity: 1;
+    
+  background: url(../img/btn-frame.png) no-repeat center center;
+	background-size: cover;
 }
-.btn.disabled {
-  opacity: 0.6;
-  transform: none !important;
-  cursor: not-allowed;
+
+#stop-btn-text {
+  width: 72px;
+  height: 44px;
+  opacity: 1;
+    
+  font-family: Alimama DongFangDaKai;
+  font-size: 36px;
+  font-weight: normal;
+  line-height: normal;
+  letter-spacing: 0em;
+    
+  font-variation-settings: "opsz" auto;
+  font-feature-settings: "kern" on;
+  color: #3D3D3D;
+	
 }
-.hide {
-  display: none !important;
+
+#stop {
+  position: absolute;
+  left: 551px;
+  top: 0px;
+  width: 180px;
+  height: 76.63px;
+  opacity: 1;
+    
+  background: url(../img/btn-frame.png) no-repeat center center;
+	background-size: cover;
 }
-.footer {
-  width: 50%;
-  margin-top: 1rem;
-  gap: 30px;
-  display: flex;
+
+#example-btn-text {
+  width: 72px;
+  height: 44px;
+  opacity: 1;
+    
+  font-family: Alimama DongFangDaKai;
+  font-size: 36px;
+  font-weight: normal;
+  line-height: normal;
+  letter-spacing: 0em;
+    
+  font-variation-settings: "opsz" auto;
+  font-feature-settings: "kern" on;
+  color: #3D3D3D;
+}
+#example {
+  position: absolute;
+  left: 827px;
+  top: 0px;
+  width: 180px;
+  height: 76.63px;
+  opacity: 1;
+    
+  background: url(../img/btn-frame.png) no-repeat center center;
+	background-size: cover;
 }
 .tip{
-  text-align: center;
-  font-size: 30px;
+  position: absolute;
+  left: 960.5px;
+  top: 773px;
+  transform: translate(-50%, 0);
+  height: 25px;
+  opacity: 1;
+    
+  font-family: Alibaba PuHuiTi 3.0;
+  font-size: 18px;
+  font-weight: 600;
+  line-height: normal;
+  letter-spacing: 0em;
+    
+  font-variation-settings: "opsz" auto;
+  font-feature-settings: "kern" on;
+  color: #FDDF89;
 }
 .score{
-  text-align: center;
-  font-size: 45px;
-  font-weight: bold;
-}
-.round {
-  /*圆角进度条外壳*/
-  width: 64rem;
-  border-radius: 5rem;
-  overflow: hidden;
+  position: absolute;
+  left: 959.5px;
+  top: 803px;
+  transform: translate(-50%, 0);
+  height: 50px;
+  opacity: 1;
+    
+  font-family: Alibaba PuHuiTi 3.0;
+  font-size: 36px;
+  font-weight: 600;
+  line-height: normal;
+  letter-spacing: 0em;
+    
+  font-variation-settings: "opsz" auto;
+  font-feature-settings: "kern" on;
+  color: #FDDF89;
 }
 progress {
-  width: 100%;
-  height: 20px;
-  color: #555;
-  background-color: #eee;
-  border: none;
-  border-radius: 3px;
-  box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2) inset;
+  width: 1200px;
+  height: 24px;
+  opacity: 1;
+    
+  background: #FFFFFF;
 }
-
 /* 已完成部分的样式 */
 progress::-webkit-progress-value {
-  background-color: #00cccccc;
+  background-color: #FEEFAC;
 }
 
 /* 未完成部分的样式 */
@@ -147,89 +322,77 @@ progress::-webkit-progress-bar {
   background-color: #eee;
 }
 
-/* Modal Styles From Shadlc */
+.pgbar {
+  position: absolute;
+  left: 360px;
+  top: 863px;
+  width: 1200px;
+  height: 24px;
+}
+.pgbar-round {
+  width: 1200px;
+  height: 24px;
+  border-radius: 5rem;
+  overflow: hidden;
+}
 
-.modal {
-  z-index: 20;
+#progress-icon {
+  width: 48px;
+  height: 41.62px;
+  opacity: 1;
+  transform: translate(-50%, -75%);
+    
+  background: url("../img/pgbar-icon.png");
+}
+
+#popup-group {
   display: flex;
-  justify-content: center;
   align-items: center;
-  position: fixed;
-  width: 100%;
-  height: 100%;
-  top: 0;
-  left: 0;
-  background: rgba(0, 0, 0, 0.2);
-  transition: all 0.5s ease;
-}
-.modal-content {
-  transition: transform 0.5s;
+  justify-content: center;
   position: absolute;
-  top: 16rem;
-  padding: 0.5rem;
-  padding-top: 1rem;
-  background: white;
-  border: solid 0.1rem var(--black);
-  border-radius: 0.5rem;
-  transition: transform 0.5s ease;
+  left: -2px;
+  top: 0px;
+  width: 1920px;
+  height: 1080px;
+  opacity: 1;
+  background: rgba(0, 0, 0, 0.6);
 }
-.modal-title {
-  font-weight: bold;
-  font-size: 2.5rem;
+
+#popup {
+  width: 600px;
+  height: 600px;
+  opacity: 1;
+    
+	background: url(../img/popup-frame.png) no-repeat center center;
+  background-size: cover;
+}
+
+#popup-mask {
+  position: absolute;
+  left: -2px;
+  top: 0px;
+  width: 1920px;
+  height: 1080px;
+  opacity: 1;
+    
+}
+
+#popup-icon {
+  width: 169px;
+  height: 172px;
+  opacity: 1;
+    
+  background: url(../img/popup-icon.png);
+	
+}
+
+#popup-title {
+  font-size: 42px;
   text-align: center;
-  margin: 0 2rem 0.5rem 2rem;
 }
-.modal-close-btn {
-  position: absolute;
-  right: 0rem;
-  top: -0.4rem;
-}
-.modal-close-btn::after {
-  position: absolute;
-  right: 0;
-  width: 2rem;
-  height: 2rem;
-  content: "×";
-  font-size: 2rem;
-  cursor: pointer;
-}
-.modal-body {
-  max-height: 90vh;
-  max-width: 80vw;
-  min-height: 20vh;
-  min-width: 50vw;
-  font-size: 2rem;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  max-height: 70vh;
-  overflow: scroll;
-}
-.modal-text {
-  font-size: 5rem;
-  font-weight: normal;
-  width: 100%;
-  white-space: pre-wrap;
-}
-.modal-comment {
-  width: 100%;
-  margin-top: 0.5rem;
-  border-top: solid 0.1rem var(--black);
-}
-.loading-text {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  width: 100%;
-  height: 100%;
-}
-.modal-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-evenly;
-  width: 100%;
-  padding-top: 1rem;
-}
-.modal-footer:empty {
-  display: none;
+
+#popup-text {
+  font-size: 24px;
+  text-align: center;
+  margin-top: 30px;
 }

@@ -11,122 +11,71 @@
     <script charset="UTF-8" id="LA_COLLECT" src="//sdk.51.la/js-sdk-pro.min.js"></script>
     <script>LA.init({id:"3LTNMctPRNmiv7MN",ck:"3LTNMctPRNmiv7MN"})</script>
   </head>
-
-  <body
-    style="
-      background: url('static/img/background.png') no-repeat center center fixed;
-      background-size: cover;
-    "
-    data-debug="false"
-  >
+  <div id="background-div"></div>
+  <body data-debug="false">
     <div class="main" id="main">
       <div id="info" style="display: none"></div>
-      <div style="display: flex; flex-direction: row">
-        <div class="canvas-container flip">
-          <video id="localVideo" class="video" playsinline></video>
-          <canvas id="localSkeletonCanvas"></canvas>
-          <canvas id="localPassiveCanvas"></canvas>
-          <canvas id="localNodeCanvas"></canvas>
-          <canvas id="localCanvas"></canvas>
-        </div>
-        <div class="canvas-container">
-          <video id="remoteVideo" class="video" playsinline></video>
-          <canvas id="remoteSkeletonCanvas"></canvas>
-          <canvas id="remotePassiveCanvas"></canvas>
-          <canvas id="remoteNodeCanvas"></canvas>
-          <canvas id="remoteCanvas"></canvas>
-        </div>
+      <div id="main-container">
+        <div class="canvas-container flip" id="left-frame"></div>
+        <video id="localVideo" class="video left-canvas" playsinline></video>
+        <canvas id="localSkeletonCanvas" class="left-canvas"></canvas>
+        <canvas id="localPassiveCanvas" class="left-canvas"></canvas>
+        <canvas id="localNodeCanvas" class="left-canvas"></canvas>
+        <canvas id="localCanvas" class="left-canvas"></canvas>
+        <div class="canvas-container" id="right-frame"></div>
+        <video id="remoteVideo" class="video right-canvas" playsinline></video>
+        <canvas id="remoteSkeletonCanvas" class="right-canvas"></canvas>
+        <canvas id="remotePassiveCanvas" class="right-canvas"></canvas>
+        <canvas id="remoteNodeCanvas" class="right-canvas"></canvas>
+        <canvas id="remoteCanvas" class="right-canvas"></canvas>
       </div>
-      <div id="loading">Loading the model...</div>
-      <div id="tip" class="tip"></div>
-      <div id="score" class="score">得分：</div>
-      <div class="round">
-        <progress id="progress" value="1" max="1"></progress>
+      <div id="tip" class="tip">请站在大约3米远处，确保全身入镜</div>
+      <div id="score" class="score">得分：0.00</div>
+      <div class="pgbar">
+        <div class="pgbar-round">
+          <progress id="progress" value="0.5" max="1"></progress>
+        </div>
+        <div id="progress-icon" style="margin-left: 50%;"></div>
       </div>
       <div class="footer">
-        <div class="btn" id="start"><div>★Start</div></div>
-        <div class="btn" id="pause"><div>Pause</div></div>
-        <div class="btn" id="stop"><div>Stop</div></div>
-        <div class="btn" id="example"><div>Example</div></div>
-        <div class="btn" id="cache" style="display: none"><div>Cache</div></div>
+        <div class="sub-footer">
+          <div class="btn" id="start"><div id="start-btn-text">开始</div></div>
+          
+          <div class="btn" id="pause"><div id="pause-btn-text">暂停</div></div>
+          
+          <div class="btn" id="stop"><div id="stop-btn-text">停止</div></div>
+          
+          <div class="btn" id="example"><div id="example-btn-text">示例</div></div>
+          
+          <div class="btn" id="cache" style="display: none"></div>
+          <div id="cache-btn-text" style="display: none">缓存</div>
+        </div>
+      </div>
+    </div>
+    <div id="popup-group" style="display: none">
+      <div id="popup-mask" onclick="toggleModal(this.parentNode)"></div>
+      <div id="popup">
+        <div id="popup-icon"></div>
+        <div id="popup-title"></div>
+        <div id="popup-text"></div>
       </div>
     </div>
     <div class="fpsbox" id="fpsbox" style="width: 100px"></div>
     <script>
-      // Modal 模态框，代码来自shadlc（https://github.com/shadlc/BCZ-Group-Manager/blob/main/static/lib/script.js）
-      // @license GPL-3.0
       // 模态框展示模块
-      function showModal(content = "", title = "", callback = null) {
-        const modalId = `modal-${Date.now()}`;
-        const modal = document.createElement("div");
-
-        modal.className = "modal";
-        modal.id = modalId;
-        modal.setAttribute("data-status", "show");
-        modal.innerHTML = `
-    <div class="modal-content" onclick="event.stopPropagation()">
-      <span class="modal-close-btn" onclick="toggleModal(null, '${modalId}')">×</span>
-      ${title ? `<div class="modal-title">${title}</div>` : ""}
-      <div class="modal-body">${content}</div>
-      ${callback ? '<div class="modal-footer"></div>' : ""}
-    </div>
-  `;
-
-        modal.onclick = (e) => toggleModal(e, modalId);
-
-        if (callback) {
-          const footer = modal.querySelector(".modal-footer");
-          footer.innerHTML = `
-      <div class="btn deny-btn">取消</div>
-      <div class="btn confirm-btn">确认</div>
-    `;
-          footer.querySelector(".confirm-btn").onclick = (e) => {
-            toggleModal(null, modalId);
-            callback(e);
-          };
-          footer.querySelector(".deny-btn").onclick = () =>
-            toggleModal(null, modalId);
-        }
-
-        document.body.appendChild(modal);
-        toggleModal(null, modalId); // 初始化显示动画
+      function showModal(content = "", title = "") {
+        document.getElementById("popup-title").innerText = title;
+        document.getElementById("popup-text").innerHTML = content;
+        document.getElementById("popup-group").style.display = "flex";
       }
 
       // 切换模态框状态
-      function toggleModal(event, modalId = "") {
-        if (event?.target?.classList.contains("modal")) {
-          const modal = document.getElementById(modalId);
-          if (!modal) return;
-
-          const status = modal.getAttribute("data-status");
-          const content = modal.querySelector(".modal-content");
-
-          modal.setAttribute(
-            "data-status",
-            status === "show" ? "hidden" : "show"
-          );
-
-          if (status === "show") {
-            content.style.transform = "scale(0.9)";
-            modal.style.opacity = 0;
-            setTimeout(() => modal.remove(), 500);
-          } else {
-            modal.classList.remove("hide");
-            content.style.transform = "scale(0.9)";
-            setTimeout(() => {
-              content.style.transform = "scale(1)";
-              modal.style.opacity = 1;
-            }, 10);
-          }
-        }
+      function toggleModal(popupGroup) {
+        popupGroup.style.display = "none";
       }
 
       function hideAllModals() {
-        document.querySelectorAll(".modal").forEach((modal) => {
-          if (modal.getAttribute("data-status") == "show") {
-            modal.click();
-          }
-        });
+        document.getElementById("popup-group").style.display = "none";
       }
     </script>
     <script src="static/js/tf.min.js"></script>
@@ -165,7 +114,6 @@
           videoWidth: 720,
           videoHeight: 540,
           loadedCallback: () => {
-            document.getElementById("loading").style.display = "none";
           },
         },
         poseNetInput: {
@@ -288,10 +236,11 @@
           });
 
         const progressBar = document.getElementById("progress"); // 进度条
+        const progessIcon = document.getElementById("progress-icon"); // 进度条图标
         const scoreText = document.getElementById("score"); // 评分显示
         const tipText = document.getElementById("tip"); // 提示信息
         setInterval(() => {
-          updateStatus(progressBar, scoreText, tipText);
+          updateStatus(progressBar, progessIcon, scoreText, tipText);
         }, 1000); // 1s更新一次
       };
 
@@ -330,25 +279,33 @@
 
       let waitTextShowed = false;
       // 4. 定时获取分数
-      function updateStatus(progressBar, scoreText, tipText) {
+      function updateStatus(progressBar, progressIcon, scoreText, tipText) {
         const status = camera.getStatus();
-        tipText.textContent = TIP_TEXT[status.tip]; // 显示提示信息
         if (status.waiting && !waitTextShowed) {
           showModal("模型正在加载，请稍候...", "提示");
           waitTextShowed = true;
+          return;
         } else if (!status.waiting && waitTextShowed) {
           hideAllModals();
           waitTextShowed = false;
         }
-        if (status.paused) scoreText.textContent = ` 得分：${status.transScore.toFixed(2)}(暂停)`; // 显示暂停状态
-        else {
-          scoreText.textContent = `得分：${status.score.toFixed(2)}`;
+        if (status.paused) {
+          if (status.transScore)
+            scoreText.textContent = ` 得分：${status.transScore.toFixed(2)}(暂停)`; // 显示暂停状态
+        }
+        else if (status.score) {
+            scoreText.textContent = `得分：${status.score.toFixed(2)}`;
+            tipText.textContent = TIP_TEXT[status.tip]; // 显示提示信息
         }
         if (status.finalScore) {
           showFinalScore(status.finalScore); // 显示最终得分
+          tipText.textContent = TIP_TEXT[status.tip]; // 显示提示信息
         } else {
           const progress = status.currentTime / status.duration;
-          if (!isNaN(progress)) progressBar.value = progress; // 进度条
+          if (!isNaN(progress)) {
+            progressBar.value = progress; // 进度条
+            progressIcon.style.marginLeft = `${(progress * 100).toFixed(2)}%`; // 进度条图标
+          }
         }
         if (status.finalRemoteCache) {
           console.log("Final remote cache:", status.finalRemoteCache);
@@ -365,7 +322,7 @@
           "您的分数是：" +
             finalScore.toFixed(2) +
             remark +
-            "<br>刷新页面开始新一轮评分。",
+            "<br>点击任意处继续",
           "评分结束"
         );
       }
