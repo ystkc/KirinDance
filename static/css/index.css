@@ -5,6 +5,7 @@
 
 body {
   overflow: hidden;
+  zoom: 0.8;
 }
 
 #main-container {
@@ -61,7 +62,7 @@ body {
 .footer {
   position: absolute;
   left: 449px;
-  top: 906px;
+  top: 886px;
   width: 1067px;
   height: 76.63px;
   opacity: 1;
@@ -311,7 +312,7 @@ progress::-webkit-progress-bar {
 
 .pgbar {
   position: absolute;
-  left: 360px;
+  left: 380px;
   top: 863px;
   width: 1200px;
   height: 24px;
@@ -368,6 +369,7 @@ progress::-webkit-progress-bar {
   width: 169px;
   height: 172px;
   opacity: 1;
+  transform: translate(-30%);
     
   background: url(../img/popup-icon.png);
 	
@@ -376,10 +378,12 @@ progress::-webkit-progress-bar {
 #popup-title {
   font-size: 42px;
   text-align: center;
+  line-height: 60px;
 }
 
 #popup-text {
   font-size: 24px;
   text-align: center;
   margin-top: 30px;
+  line-height: 50px;
 }

@@ -1,2 +1,1 @@
-:: 保留0:25到1:25，并裁剪到720*540
-ffmpeg -i std64_fixed_64.mp4 -ss 00:00:00 -to 00:00:20  -vf "scale=720:540" -c:v libx264 -profile:v baseline -level 3.0 -movflags +faststart -max_muxing_queue_size 1024 std64_fixed.mp4
+ffmpeg -i std64_fixed_64.mp4 -ss 00:00:00 -to 00:00:25  -vf "scale=720:540" -c:v libx264 -profile:v baseline -level 3.0 -movflags +faststart -max_muxing_queue_size 1024 std64_fixed.mp4

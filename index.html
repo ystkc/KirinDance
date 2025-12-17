@@ -64,7 +64,7 @@
     <script>
       // 模态框展示模块
       function showModal(content = "", title = "", noDismiss = false) {
-        document.getElementById("popup-title").innerText = title;
+        document.getElementById("popup-title").innerHTML = title;
         document.getElementById("popup-text").innerHTML = content;
         const g = document.getElementById("popup-group");
         g.style.display = "flex";
@@ -328,15 +328,13 @@
 
       function showFinalScore(finalScore) {
         let remark = "";
-        if (finalScore > 90) remark = "<br>太强辣！";
-        else if (finalScore > 80) remark = "<br>相当不错！";
-        else remark = "<br>再接再厉！";
+        if (finalScore > 90) remark = "太强辣！";
+        else if (finalScore > 80) remark = "相当不错！";
+        else remark = "再接再厉！";
         showModal(
-          "您的分数是：" +
-            finalScore.toFixed(2) +
             remark +
             "<br>点击任意处继续",
-          "评分结束"
+          "评分结束<br>您的分数是：" + finalScore.toFixed(2)
         );
       }
     </script>

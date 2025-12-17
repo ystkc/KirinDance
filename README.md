@@ -5,8 +5,8 @@
 
 ### 使用方式
 
-1. 将要学习的麒麟舞视频放在根目录 /static 文件夹下，命名为 std_fixed.mp4
-2. 安装ruby 3.3.3(可以通过命令`ruby -v`检查版本)，然后运行`gem install bundler`，然后在项目根目录运行`bundle install`
+1. 将要学习的麒麟舞视频放在根目录 /static 文件夹下，命名为 std64_fixed.mp4
+2. 安装ruby 3.3.3(可以通过命令`ruby -v`检查版本)，然后运行`gem install bundler -v 2.5.22`，然后在项目根目录运行`bundle install`
 3. 运行launch.bat，会自动打开浏览器
 4. 若脚本运行出现错误，可以在项目根目录下使用终端运行 **`bundle exec jekyll serve --disable-disk-cache --incremental --port 8860`** 初次运行大约需要5分钟，等待出现终端出现消息：`Server running... press ctrl-c to stop.` 后在本电脑使用浏览器访问 **`localhost:8860/KirinDance`**
 
