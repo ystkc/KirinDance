@@ -1,4 +1,7 @@
-
+* {
+  font-family: KaiTi, Consolas, 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  font-weight: 600;
+}
 
 body {
   position: relative;
@@ -83,7 +86,6 @@ body {
   align-items: center;
   padding: 18px 36px;
   font-size: 1.1rem;
-  font-weight: 600;
   border-radius: 12px;
   cursor: pointer;
   /* box-shadow: 0 6px 20px rgba(106, 17, 203, 0.3); */
@@ -150,9 +152,7 @@ body {
   height: 44px;
   opacity: 1;
     
-  font-family: Alimama DongFangDaKai;
   font-size: 36px;
-  font-weight: normal;
   line-height: normal;
   letter-spacing: 0em;
     
@@ -190,9 +190,7 @@ body {
   height: 44px;
   opacity: 1;
     
-  font-family: Alimama DongFangDaKai;
   font-size: 36px;
-  font-weight: normal;
   line-height: normal;
   letter-spacing: 0em;
     
@@ -219,9 +217,7 @@ body {
   height: 44px;
   opacity: 1;
     
-  font-family: Alimama DongFangDaKai;
   font-size: 36px;
-  font-weight: normal;
   line-height: normal;
   letter-spacing: 0em;
     
@@ -248,9 +244,7 @@ body {
   height: 44px;
   opacity: 1;
     
-  font-family: Alimama DongFangDaKai;
   font-size: 36px;
-  font-weight: normal;
   line-height: normal;
   letter-spacing: 0em;
     
@@ -277,9 +271,7 @@ body {
   height: 25px;
   opacity: 1;
     
-  font-family: Alibaba PuHuiTi 3.0;
   font-size: 18px;
-  font-weight: 600;
   line-height: normal;
   letter-spacing: 0em;
     
@@ -295,9 +287,7 @@ body {
   height: 50px;
   opacity: 1;
     
-  font-family: Alibaba PuHuiTi 3.0;
   font-size: 36px;
-  font-weight: 600;
   line-height: normal;
   letter-spacing: 0em;
     
