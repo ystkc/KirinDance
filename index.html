@@ -53,7 +53,7 @@
       </div>
     </div>
     <div id="popup-group" style="display: none">
-      <div id="popup-mask" onclick="toggleModal(this.parentNode)"></div>
+      <div id="popup-mask" onclick="dismissModal(this.parentNode)"></div>
       <div id="popup">
         <div id="popup-icon"></div>
         <div id="popup-title"></div>
@@ -63,19 +63,32 @@
     <div class="fpsbox" id="fpsbox" style="width: 100px"></div>
     <script>
       // 模态框展示模块
-      function showModal(content = "", title = "") {
+      function showModal(content = "", title = "", noDismiss = false) {
         document.getElementById("popup-title").innerText = title;
         document.getElementById("popup-text").innerHTML = content;
-        document.getElementById("popup-group").style.display = "flex";
+        const g = document.getElementById("popup-group");
+        g.style.display = "flex";
+        if (noDismiss) {
+          g.dataset.noDismiss = 1;
+        }
       }
 
       // 切换模态框状态
-      function toggleModal(popupGroup) {
+      function hideModal(popupGroup) {
         popupGroup.style.display = "none";
+        delete popupGroup.dataset.noDismiss;
       }
 
       function hideAllModals() {
-        document.getElementById("popup-group").style.display = "none";
+        hideModal(document.getElementById("popup-group"));
+      }
+      
+      // 用户关闭
+      function dismissModal(popupGroup) {
+        if (popupGroup.dataset.noDismiss) {
+          return;
+        }
+        hideModal(popupGroup);
       }
     </script>
     <script src="static/js/tf.min.js"></script>
@@ -282,7 +295,7 @@
       function updateStatus(progressBar, progressIcon, scoreText, tipText) {
         const status = camera.getStatus();
         if (status.waiting && !waitTextShowed) {
-          showModal("模型正在加载，请稍候...", "提示");
+          showModal("模型正在加载，请稍候...", "提示", true);
           waitTextShowed = true;
           return;
         } else if (!status.waiting && waitTextShowed) {
