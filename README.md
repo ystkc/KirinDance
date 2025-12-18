@@ -6,9 +6,10 @@
 ### 使用方式
 
 1. 将要学习的麒麟舞视频放在根目录 /static 文件夹下，命名为 std64_fixed.mp4
-2. 安装ruby 3.3.3(可以通过命令`ruby -v`检查版本)，然后运行`gem install bundler -v 2.5.22`，然后在项目根目录运行`bundle install`
-3. 运行launch.bat，会自动打开浏览器
-4. 若脚本运行出现错误，可以在项目根目录下使用终端运行 **`bundle exec jekyll serve --disable-disk-cache --incremental --port 8860`** 初次运行大约需要5分钟，等待出现终端出现消息：`Server running... press ctrl-c to stop.` 后在本电脑使用浏览器访问 **`localhost:8860/KirinDance`**
+2. 安装msys2，然后安装ruby 3.3.3 devkit(可以通过命令`ruby -v`检查版本,windows使用RubyInstaller务必选择开发者版本也就是devkit)，ruby安装完成后会自动进行ridk install依照默认安装1、3即可
+3. 打开管理员终端（Win+R，输入cmd，然后Ctrl+Shift+Enter）运行`gem install bundler -v 2.5.22`、`gem install jekyll -v 4.3.4`，然后在项目根目录（终端执行`cd /d "项目根目录"`）运行`bundle install`
+4. 运行launch.bat，会自动打开浏览器（如果一个窗口闪退，只剩一个窗口在输出waiting那就是出错，请退出并通过步骤5排查错误）
+5. 若脚本运行出现错误，可以在项目根目录下使用终端运行 **`bundle exec jekyll serve --disable-disk-cache --incremental --port 8860`** 初次运行大约需要5分钟，等待出现终端出现消息：`Server running... press ctrl-c to stop.` 后在本电脑使用浏览器访问 **`localhost:8860/KirinDance`**
 
 ---
 
