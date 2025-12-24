@@ -189,6 +189,34 @@
         stats.domElement.remove();
       }
       window.onload = function () {
+
+        // 首先根据屏幕宽度设置body的zoom
+        function resizeBody() {
+          const body = document.body;
+          const bgDiv = document.getElementById("background-div");
+          const width = window.innerWidth;
+          const height = window.innerHeight;
+          const targetRatio = 1920 / 1080;
+          const currentRatio = width / height;
+          // 如果是高度太高，根据宽度调整
+          if (currentRatio < targetRatio) {
+            const zoom = width / 1920;
+            body.style.zoom = zoom;
+            bgDiv.style.backgroundSize = "100%";
+          } else {
+          // 如果是宽度太宽，根据高度调整
+            const zoom = height / 1080;
+            body.style.zoom = zoom;
+            // 还需要更改背景模式为高度适应
+            bgDiv.style.backgroundSize = "auto 100%";
+          }
+
+        }
+        // 注册窗口大小改变事件
+        window.addEventListener("resize", resizeBody);
+        // 首次调用
+        resizeBody();
+
         document
           .getElementById("start")
           .addEventListener("click", async function () {

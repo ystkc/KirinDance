@@ -179,8 +179,8 @@ body {
   height: 100%;
   opacity: 1;
     
-  background: url(../img/background.png) no-repeat center center;
-	background-size: cover;
+  background: url(../img/background.png) no-repeat;
+	background-size: 100%;
 }
 
 #pause-btn-text {
