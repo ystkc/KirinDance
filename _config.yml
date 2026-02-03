@@ -55,9 +55,12 @@ exclude:
   - static/bin_unzipped/
   - archiev/
   - cache/
+  - build/
+  - dist/
   - milestone/
   - tools/
   - "*.txt"
   - "*.py"
   - "*.bat"
   - "*.prproj"
+  - "*.lnk"

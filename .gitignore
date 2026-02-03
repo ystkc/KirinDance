@@ -20,3 +20,6 @@ _site
 .jekyll-metadata
 vendor
 *.prproj
+/build
+/dist
+*.lnk
