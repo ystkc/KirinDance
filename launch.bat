@@ -1,7 +1,7 @@
 @echo off
 chcp 65001
 echo if the files stay outdated, or unresponsive without 404, temporarily remove the --incremental
-start cmd /c "bundle exec jekyll serve --disable-disk-cache --port 8860"
+start cmd /c "bundle exec jekyll serve --disable-disk-cache --port 8860 --host 0.0.0.0"
 
 setlocal enabledelayedexpansion
 
